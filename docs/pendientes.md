@@ -22,7 +22,9 @@ Código en GitHub en `dev` (repo **público**: no subir secretos ni datos person
 Hecho el 2026-09-24: `dev` en GitHub (rama por defecto) y CI en verde. `qa` y `pdn` se crean en los pasos 8 y 9
 (crear la rama dispara su deploy). Gitflow: `CLAUDE.md` → *Gitflow*.
 
-### 2. Crear QA en la VPS (necesita tu contraseña de `sudo`, una sola vez)
+### 2. ~~Crear QA en la VPS~~ ✅
+Hecho el 2026-09-24: `new-app.sh` (dueño) + `infra/bootstrap-env.sh qa` (agente). 9 tablas en `utf8mb4_unicode_ci`,
+migraciones 001–002 aplicadas, `_lib/` bloqueado (403), endpoints protegidos (401). Referencia de lo que se corrió:
 ```bash
 ssh -t legacy-vps '/opt/vps-tools/new-app.sh legacyenterprise qa qa.legacyenterprise.legacysoftware.cloud'
 ```
@@ -32,8 +34,13 @@ bash infra/bootstrap-env.sh qa
 ```
 Instala el compose con R2/FCM, completa el `.env`, copia `migrate.sh`/`db-guard.sh` a `/opt/vps-tools` **solo si no existen**, sube backend y migraciones, levanta contenedores y aplica migraciones.
 
-### 3. Proxy Host en NPM para QA
-Túnel: `ssh -L 8181:127.0.0.1:8181 legacy-vps` → abrir `http://localhost:8181`.
+### 3. ~~Proxy Host en NPM para QA~~ ✅
+Hecho el 2026-09-24 por API con un usuario temporal de NPM (proxy host 6, certificado Let's Encrypt 6, vence
+2026-12-23, lo renueva NPM). Verificado: HTTPS 200 con HTTP/2, HTTP → 301 a HTTPS, CORS para `localhost:4200`,
+401 sin token, `_lib/` 403. **Pendiente: borrar el usuario temporal `claudecode@…` de NPM.**
+Configuración usada (para producción, con `api.` y `legacyenterprise_php_prod`):
+Túnel: `ssh -L 8181:127.0.0.1:81 legacy-vps` (el panel de NPM escucha en el **81** del servidor; 8181 es el
+puerto local) → abrir `http://localhost:8181`.
 Proxy Hosts → Add: dominio `qa.legacyenterprise.legacysoftware.cloud`, `http` → `legacyenterprise_php_qa` : `80`,
 Block Common Exploits ✔, pestaña SSL: Let's Encrypt + Force SSL + HTTP/2.
 Prueba: `curl https://qa.legacyenterprise.legacysoftware.cloud/app_global_status.php`.
@@ -47,7 +54,12 @@ ssh legacy-vps "docker exec -i legacyenterprise_db_qa sh -c 'MYSQL_PWD=\$MYSQL_R
 ```
 3. Recarga: verás el panel de **Empresas** y **Sedes**. La sede semilla es `Sede Principal` (código `SEED0001`, todos los módulos habilitados).
 
-### 5. Tokens S3 de R2 (separados de Kingdom)
+### 5. ~~Tokens S3 de R2~~ ✅ (QA) · ⏳ cargar el de PDN cuando exista producción
+Hecho el 2026-09-24: tokens `legacyenterprise-r2-qa` y `legacyenterprise-r2-prod` (cada uno solo con sus 2 buckets,
+filtro de IP de la VPS). Claves de QA cargadas en el `.env` de QA y probadas de verdad desde el contenedor: subida y
+lectura pública, privado inaccesible sin firma y accesible con URL prefirmada, **el token de QA recibe 403 al
+escribir en el bucket de PDN**, borrado OK. Claves de PDN guardadas en `C:\Users\Alejo\r2-prod.env` (fuera del repo)
+para el paso 9. Referencia del procedimiento:
 Cloudflare → R2 → **Manage API tokens** → **Create Account API token**, permiso **Object Read & Write**, *Apply to specific buckets only*:
 - `legacyenterprise-r2-qa` → `legacyenterprise-qa`, `legacyenterprise-qa-private`
 - `legacyenterprise-r2-prod` → `legacyenterprise-prod`, `legacyenterprise-prod-private`
@@ -65,12 +77,18 @@ ssh legacy-vps 'cd /opt/legacyenterprise/qa && docker compose up -d'
 rm ~/r2-qa.env
 ```
 
-### 6. Clave VAPID (push web)
+### 6. ~~Clave VAPID~~ ✅
+Hecho el 2026-09-24: par validado (la pública deriva de la privada), pública en `environment*.ts`; la privada no se
+guarda en ningún lado (el backend envía con la cuenta de servicio). Referencia:
 Firebase → [Configuración → Cloud Messaging](https://console.firebase.google.com/project/legacyenterprise-731cb/settings/cloudmessaging) →
 **Configuración web → Certificados push web → Generar par de claves**. Copia la clave (empieza con `B`): es pública,
 puedes pegármela en el chat y la pongo en `environment*.ts`.
 
-### 7. Cuenta de servicio de FCM (enviar push desde el backend)
+### 7. ~~Cuenta de servicio de FCM~~ ✅ (QA) · ⏳ PDN
+Hecho el 2026-09-24 en QA: `FCM_SERVICE_ACCOUNT_B64` cargada desde
+`~/Downloads/legacyenterprise-731cb-firebase-adminsdk-fbsvc-508a8fedf5.json`; verificado token OAuth y autenticación
+contra FCM (un token de dispositivo inventado responde `invalid_token`). Cargar el mismo JSON en el `.env` de PDN en
+el paso 9 y después borrarlo de Descargas. Referencia:
 Firebase → Configuración → **Cuentas de servicio** → *Generar nueva clave privada* (descarga un JSON). Cárgalo sin pasar por el chat:
 ```bash
 E=/opt/legacyenterprise/qa/.env

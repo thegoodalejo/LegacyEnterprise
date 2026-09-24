@@ -3,9 +3,12 @@
 .firebase/
 firebase-debug*.log
 
-# Secretos y llaves: nunca al repo
+# Secretos y llaves: nunca al repo (el repo es PÚBLICO)
 .env
+*.env
 *.env.local
+*credentials*.txt
+r2-*.txt
 gh_actions_*
 *-firebase-adminsdk-*.json
 

@@ -16,5 +16,5 @@ export const environment = {
     messagingSenderId: '29644516990',
     appId: '1:29644516990:web:e6dfcf2d1bcf0e342c322f',
   },
-  vapidKey: '',
+  vapidKey: 'BIMQjxRKPahxOUx00LzzIo8tMXc7YMDYVS3QuR0f7zAtNtB9mawrYk3t-9898_suEIJzmIL1FFkbG9EmMHmg70s',   // pública por diseño (Firebase → Cloud Messaging → Certificados push web)
 };

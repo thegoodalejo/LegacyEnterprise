@@ -98,6 +98,9 @@ Nombres generados por `new-app.sh` (ver `references/vps-multiapp.md` de la skill
 - Tokens S3 (Account API Tokens, propios de LegacyEnterprise, separados de los de Kingdom):
   `legacyenterprise-r2-prod` (solo los 2 buckets prod) y `legacyenterprise-r2-qa` (solo los 2 buckets qa).
   Los crea el dueño en el panel; las claves van directo al `.env` de cada entorno en la VPS, nunca al chat ni a git.
+- **Los dos tokens tienen filtro de IP: solo funcionan desde la IP de `legacy-vps`** (verificado: el contenedor PHP
+  sale por esa IPv4 y no usa IPv6). Sin vencimiento. Si se migra de servidor, editar el filtro de ambos tokens:
+  un 403 de R2 en las subidas después de una migración es esto. Tampoco sirven desde una PC de desarrollo.
 
 ## Firebase
 

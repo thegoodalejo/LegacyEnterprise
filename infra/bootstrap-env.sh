@@ -30,6 +30,18 @@ HOST=legacy-vps
 ROOT="/opt/$APP/$ENV_NAME"
 cd "$(dirname "$0")/.."
 
+# Sube <origen> a <destino remoto> reemplazando su contenido (como rsync --delete). Git Bash en Windows no trae
+# rsync: en ese caso va por tar sobre SSH. Excluye .git, .env, logs y vendor.
+sync_dir() {
+  local src="$1" dest="$2" ex=(--exclude=.git --exclude=.env --exclude=logs --exclude=vendor)
+  if command -v rsync >/dev/null 2>&1; then
+    rsync -az --delete "${ex[@]}" "$src/" "$HOST:$dest/"
+  else
+    tar -C "$src" "${ex[@]}" -czf - . \
+      | ssh "$HOST" "mkdir -p '$dest' && find '$dest' -mindepth 1 -delete && tar -xzf - -C '$dest'"
+  fi
+}
+
 echo "== [$ENV_NAME] comprobando que new-app.sh ya creó $ROOT"
 ssh "$HOST" "test -f $ROOT/.env && test -f $ROOT/docker-compose.yml" \
   || { echo "No existe $ROOT: corre primero new-app.sh (ver cabecera de este script)." >&2; exit 2; }
@@ -41,7 +53,8 @@ echo "== 2. variables extra en .env (solo las que falten)"
 while IFS= read -r line; do
   [[ "$line" =~ ^[A-Z0-9_]+= ]] || continue
   key="${line%%=*}"
-  ssh "$HOST" "grep -q '^$key=' $ROOT/.env || printf '%s\n' '$line' >> $ROOT/.env"
+  # -n: sin él, ssh se come el stdin del while y solo se procesa la primera línea.
+  ssh -n "$HOST" "grep -q '^$key=' $ROOT/.env || printf '%s\n' '$line' >> $ROOT/.env"
 done < "infra/$ENV_NAME/env.extra"
 
 echo "== 3. scripts compartidos en /opt/vps-tools (sin sobrescribir)"
@@ -54,9 +67,11 @@ for s in db-guard.sh migrate.sh reset-qa-from-prod.sh; do
 done
 
 echo "== 4. código y migraciones"
-rsync -az --delete --exclude='.git' --exclude='.env' --exclude='logs/' --exclude='vendor/' backend/ "$HOST:$ROOT/app/"
-ssh "$HOST" "mkdir -p $ROOT/migrations"
-rsync -az --delete database/migrations/ "$HOST:$ROOT/migrations/"
+sync_dir backend "$ROOT/app"
+sync_dir database/migrations "$ROOT/migrations"
+if [ "$ENV_NAME" = qa ] && [ -f database/qa-sanitize.sql ]; then
+  scp -q database/qa-sanitize.sql "$HOST:$ROOT/qa-sanitize.sql"
+fi
 
 echo "== 5. contenedores, migraciones y prueba"
 ssh "$HOST" "cd $ROOT && docker compose up -d --build"
