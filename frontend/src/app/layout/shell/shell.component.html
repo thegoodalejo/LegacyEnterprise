@@ -1,0 +1,98 @@
+<mat-toolbar class="topbar">
+  @if (isMobile()) {
+    <button mat-icon-button (click)="toggleNav()" [attr.aria-label]="'shell.menu' | translate">
+      <mat-icon>menu</mat-icon>
+    </button>
+  }
+
+  <a class="brand" routerLink="/home" [attr.aria-label]="'nav.home' | translate">
+    <img class="brand-logo" [src]="brand.logo()" alt="" />
+    <span class="brand-name">{{ brand.nombre() || ('app.name' | translate) }}</span>
+  </a>
+
+  @if (activeModule(); as m) {
+    <span class="module-sep" aria-hidden="true"></span>
+    <span class="module-name">{{ m.label | translate }}</span>
+  }
+
+  <app-sede-switcher class="sede" />
+
+  <span class="spacer"></span>
+
+  @if (session.sedeId() && !session.isNuevo()) {
+    <app-app-switcher [modules]="modules()" [active]="activeModule()?.code ?? null" />
+  }
+
+  @if (session.sedeId()) {
+    <app-notification-bell />
+  }
+
+  <button mat-icon-button [matMenuTriggerFor]="userMenu" class="avatar-btn" [attr.aria-label]="'shell.account' | translate">
+    @if (session.user()?.foto_url; as foto) {
+      <img class="avatar" [src]="foto" alt="" referrerpolicy="no-referrer" />
+    } @else {
+      <span class="avatar initials">{{ initials() }}</span>
+    }
+  </button>
+  <mat-menu #userMenu="matMenu" xPosition="before">
+    <div class="user-head" role="presentation">
+      <strong>{{ session.user()?.nombre || session.user()?.email }}</strong>
+      <span>{{ session.user()?.email }}</span>
+      @if (session.rol(); as rol) {
+        <span class="role-badge" [class.support]="session.isPlatformAdmin()">
+          {{ session.isPlatformAdmin() ? ('shell.platform' | translate) : ('roles.' + rol | translate) }}
+        </span>
+      }
+    </div>
+    <mat-divider />
+    <button mat-menu-item (click)="theme.toggle()">
+      <mat-icon>{{ theme.mode() === 'dark' ? 'light_mode' : 'dark_mode' }}</mat-icon>
+      <span>{{ (theme.mode() === 'dark' ? 'shell.theme_light' : 'shell.theme_dark') | translate }}</span>
+    </button>
+    <button mat-menu-item (click)="setLang(i18n.lang() === 'es' ? 'en' : 'es')">
+      <mat-icon>translate</mat-icon>
+      <span>{{ 'shell.language' | translate }}</span>
+    </button>
+    <mat-divider />
+    <button mat-menu-item (click)="logout()">
+      <mat-icon>logout</mat-icon>
+      <span>{{ 'shell.logout' | translate }}</span>
+    </button>
+  </mat-menu>
+</mat-toolbar>
+
+<mat-sidenav-container class="container">
+  <mat-sidenav
+    class="nav"
+    [class.rail]="!isMobile()"
+    [mode]="isMobile() ? 'over' : 'side'"
+    [opened]="!isMobile() || drawerOpen()"
+    (closedStart)="drawerOpen.set(false)"
+    [fixedInViewport]="isMobile()"
+  >
+    <nav class="nav-list">
+      @if (isMobile()) {
+        <div class="drawer-head">
+          <img class="brand-logo" [src]="brand.logo()" alt="" />
+          <span>{{ activeModule() ? (activeModule()!.label | translate) : (brand.nombre() || ('app.name' | translate)) }}</span>
+        </div>
+      }
+      @for (item of nav(); track item.path) {
+        <a
+          class="nav-item"
+          [routerLink]="item.path"
+          routerLinkActive="active"
+          [routerLinkActiveOptions]="{ exact: true }"
+          (click)="onNavigate()"
+        >
+          <span class="nav-icon"><mat-icon>{{ item.icon }}</mat-icon></span>
+          <span class="nav-label">{{ item.label | translate }}</span>
+        </a>
+      }
+    </nav>
+  </mat-sidenav>
+
+  <mat-sidenav-content class="content">
+    <router-outlet />
+  </mat-sidenav-content>
+</mat-sidenav-container>

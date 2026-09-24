@@ -1,0 +1,8 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512" role="img" aria-label="Legacy Enterprise">
+  <!-- Marca: cuadrícula 2×2 de módulos (evoca el app switcher). Los 3 bloques índigo forman una "L";
+       el punto turquesa es el módulo activo / integraciones. Colores = semillas de la paleta por defecto. -->
+  <rect x="64"  y="64"  width="176" height="176" rx="40" fill="#3949AB"/>
+  <rect x="64"  y="272" width="176" height="176" rx="40" fill="#3949AB"/>
+  <rect x="272" y="272" width="176" height="176" rx="40" fill="#3949AB"/>
+  <circle cx="360" cy="152" r="88" fill="#00A08A"/>
+</svg>

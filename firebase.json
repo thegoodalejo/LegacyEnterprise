@@ -1,0 +1,17 @@
+{
+  "hosting": {
+    "public": "frontend/dist/legacyenterprise/browser",
+    "ignore": ["firebase.json", "**/.*"],
+    "rewrites": [{ "source": "**", "destination": "/index.html" }],
+    "headers": [
+      {
+        "source": "/@(ngsw-worker.js|firebase-messaging-sw.js|index.html|manifest.webmanifest|ngsw.json)",
+        "headers": [{ "key": "Cache-Control", "value": "no-cache" }]
+      },
+      {
+        "source": "/i18n/*.json",
+        "headers": [{ "key": "Cache-Control", "value": "no-cache" }]
+      }
+    ]
+  }
+}

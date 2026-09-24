@@ -1,0 +1,62 @@
+<section class="page">
+  <header class="page-header">
+    <h1>{{ 'notif.title' | translate }}</h1>
+    <div class="actions">
+      <button mat-stroked-button [disabled]="!unread()" (click)="markAllRead()">
+        <mat-icon>done_all</mat-icon>{{ 'notif.mark_all_read' | translate }}
+      </button>
+      <button mat-stroked-button [disabled]="!read()" (click)="clearRead()">
+        <mat-icon>delete_sweep</mat-icon>{{ 'notif.clear_read' | translate }}
+      </button>
+    </div>
+  </header>
+
+  @if (messaging.state() === 'default' || messaging.state() === 'denied') {
+    <div class="push-card">
+      <mat-icon>notifications_off</mat-icon>
+      <div class="push-text">
+        <strong>{{ 'notif.push_off_title' | translate }}</strong>
+        <span>{{ 'notif.push_off_desc' | translate }}</span>
+      </div>
+      <button mat-flat-button (click)="enablePush()">{{ 'notif.enable_push' | translate }}</button>
+    </div>
+  }
+
+  @if (loaded() && !items().length) {
+    <div class="empty">
+      <mat-icon>notifications_none</mat-icon>
+      <p>{{ 'notif.empty' | translate }}</p>
+    </div>
+  }
+
+  @for (g of groups(); track g.label) {
+    <h2 class="group">{{ g.label | translate }}</h2>
+    <ul class="list">
+      @for (n of g.items; track n.uuid) {
+        <li [id]="'n-' + n.uuid" class="item" [class.unread]="!n.is_read" [class.highlight]="n.uuid === highlight()">
+          <button class="item-main" (click)="open(n)">
+            <span class="dot" aria-hidden="true"></span>
+            <span class="content">
+              <span class="title">{{ n.title }}</span>
+              @if (n.body) { <span class="body">{{ n.body }}</span> }
+              <span class="time">{{ n.created_at.replace(' ', 'T') | date: 'short' : undefined : i18n.lang() }}</span>
+            </span>
+          </button>
+          <button mat-icon-button [matMenuTriggerFor]="menu" [attr.aria-label]="'common.more' | translate">
+            <mat-icon>more_vert</mat-icon>
+          </button>
+          <mat-menu #menu="matMenu" xPosition="before">
+            @if (!n.is_read) {
+              <button mat-menu-item (click)="markRead(n)"><mat-icon>done</mat-icon>{{ 'notif.mark_read' | translate }}</button>
+            }
+            <button mat-menu-item (click)="remove(n)"><mat-icon>delete</mat-icon>{{ 'common.delete' | translate }}</button>
+          </mat-menu>
+        </li>
+      }
+    </ul>
+  }
+
+  @if (hasMore()) {
+    <div class="more"><button mat-button (click)="load(true)">{{ 'notif.load_more' | translate }}</button></div>
+  }
+</section>

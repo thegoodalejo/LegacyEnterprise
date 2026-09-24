@@ -1,0 +1,88 @@
+# /opt/legacyenterprise/production/docker-compose.yml — misma base que genera new-app.sh (kit infra/vps),
+# con las variables de R2 y FCM agregadas al environment: explícito.
+# production = production | qa     prod = prod | qa
+name: legacyenterprise_production
+
+services:
+  mariadb:
+    image: mariadb:10.11
+    container_name: legacyenterprise_db_prod
+    restart: unless-stopped
+    # Collation fija: mezclar general_ci con unicode_ci rompió un COALESCE en producción (Kingdom 2026-09).
+    command: ["--character-set-server=utf8mb4", "--collation-server=utf8mb4_unicode_ci"]
+    environment:
+      MYSQL_ROOT_PASSWORD: ${DB_ROOT_PASSWORD}
+      MYSQL_DATABASE: ${DB_NAME}          # legacyenterprise_prod_db
+      MYSQL_USER: ${DB_USER}              # legacyenterprise_prod_user
+      MYSQL_PASSWORD: ${DB_PASSWORD}
+    labels:
+      legacy.app: "legacyenterprise"
+      legacy.env: "production"
+    volumes:
+      - ./database:/var/lib/mysql
+    networks:
+      - app_net
+    mem_limit: 512m
+    healthcheck:
+      test: ["CMD", "healthcheck.sh", "--connect", "--innodb_initialized"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  php:
+    build: ./app              # el Dockerfile vive en backend/ del repo (rsync --delete lo borraría si no)
+    container_name: legacyenterprise_php_prod
+    restart: unless-stopped
+    depends_on:
+      mariadb:
+        condition: service_healthy
+    # Explícito, no env_file: así DB_ROOT_PASSWORD nunca llega a PHP.
+    environment:
+      APP_ENV: ${APP_ENV}
+      TZ: ${APP_TZ}
+      DB_HOST: mariadb
+      DB_NAME: ${DB_NAME}
+      DB_USER: ${DB_USER}
+      DB_PASSWORD: ${DB_PASSWORD}
+      FIREBASE_PROJECT_ID: ${FIREBASE_PROJECT_ID}
+      FCM_SERVICE_ACCOUNT_B64: ${FCM_SERVICE_ACCOUNT_B64}
+      R2_ENDPOINT: ${R2_ENDPOINT}
+      R2_ACCESS_KEY: ${R2_ACCESS_KEY}
+      R2_SECRET_KEY: ${R2_SECRET_KEY}
+      R2_BUCKET: ${R2_BUCKET}                   # legacyenterprise-prod
+      R2_BUCKET_PRIVATE: ${R2_BUCKET_PRIVATE}   # legacyenterprise-prod-private
+      R2_PUBLIC_URL: ${R2_PUBLIC_URL}
+    labels:
+      legacy.app: "legacyenterprise"
+      legacy.env: "production"
+    volumes:
+      - ./app:/var/www/html
+      - ./storage:/var/storage     # temporales/exportaciones; los archivos de usuario van a R2. Nunca secretos aquí.
+      - ./logs:/var/log/app        # logs de la app y de los crons; los de Apache van a `docker logs`
+      - ./uploads.ini:/usr/local/etc/php/conf.d/uploads.ini:ro
+    networks:
+      - app_net
+      - proxy_net
+    mem_limit: 512m
+
+  phpmyadmin:
+    image: phpmyadmin:latest
+    profiles: ["tools"]            # solo bajo demanda: docker compose --profile tools up -d phpmyadmin
+    container_name: legacyenterprise_phpmyadmin_prod
+    restart: unless-stopped
+    depends_on:
+      mariadb:
+        condition: service_healthy
+    environment:
+      PMA_HOST: mariadb
+      UPLOAD_LIMIT: 100M
+    networks:
+      - app_net
+      - proxy_net
+
+networks:
+  app_net:
+    name: production_legacyenterprise_net
+  proxy_net:
+    external: true
+    name: proxy_net

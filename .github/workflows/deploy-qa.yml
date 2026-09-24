@@ -1,0 +1,55 @@
+name: Deploy QA
+
+on:
+  push:
+    branches: [qa]
+    paths-ignore: ['docs/**', '**/*.md']
+
+concurrency:
+  group: deploy-qa
+  cancel-in-progress: false
+
+env:
+  APP: legacyenterprise
+  ENV_DIR: qa
+  SHORT: qa
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Lint PHP
+        run: find backend -name '*.php' -print0 | xargs -0 -n1 php -l > /dev/null
+
+      - name: Configurar SSH
+        env:
+          SSH_KEY: ${{ secrets.VPS_SSH_KEY }}
+        run: |
+          mkdir -p ~/.ssh
+          printf '%s\n' "$SSH_KEY" > ~/.ssh/id_ed25519
+          chmod 600 ~/.ssh/id_ed25519
+          ssh-keyscan -H ${{ secrets.VPS_HOST }} >> ~/.ssh/known_hosts 2>/dev/null || true
+
+      # Reintento: el SSH del runner da timeouts intermitentes que se resuelven solos.
+      - name: Sincronizar backend y migraciones
+        run: |
+          SSH="ssh -i ~/.ssh/id_ed25519 -o ConnectTimeout=20"
+          DEST="${{ secrets.VPS_USER }}@${{ secrets.VPS_HOST }}:/opt/$APP/$ENV_DIR"
+          for i in 1 2 3; do
+            rsync -az --delete --exclude='.git' --exclude='.env' --exclude='logs/' --exclude='vendor/' \
+              -e "$SSH" ./backend/ "$DEST/app/" \
+            && rsync -az --delete -e "$SSH" ./database/migrations/ "$DEST/migrations/" \
+            && exit 0
+            echo "Intento $i falló, reintentando en 20s..."; sleep 20
+          done
+          exit 1
+
+      - name: Migraciones y recarga
+        run: |
+          ssh -i ~/.ssh/id_ed25519 -o ConnectTimeout=20 ${{ secrets.VPS_USER }}@${{ secrets.VPS_HOST }} \
+            "timeout 300 /opt/vps-tools/migrate.sh $APP $ENV_DIR && timeout 30 docker exec ${APP}_php_${SHORT} service apache2 reload"
+
+      - name: Verificar
+        run: curl -fsS https://qa.legacyenterprise.legacysoftware.cloud/app_global_status.php

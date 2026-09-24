@@ -1,0 +1,217 @@
+:host {
+  display: flex;
+  flex-direction: column;
+  height: 100%;
+}
+
+.topbar {
+  position: sticky;
+  top: 0;
+  z-index: 3;
+  gap: 4px;
+  padding: 0 8px 0 12px;
+  background: var(--md-sys-color-surface-container);
+  color: var(--md-sys-color-on-surface);
+  border-bottom: 1px solid var(--md-sys-color-outline-variant);
+}
+
+.brand {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  min-width: 0;
+  padding: 4px 8px 4px 4px;
+  border-radius: 12px;
+  color: inherit;
+  text-decoration: none;
+}
+
+.brand-logo {
+  width: 32px;
+  height: 32px;
+  object-fit: contain;
+  flex: none;
+}
+
+.brand-name {
+  font: var(--mat-sys-title-medium);
+  font-weight: 600;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.module-sep {
+  width: 1px;
+  height: 24px;
+  margin: 0 8px;
+  background: var(--md-sys-color-outline-variant);
+}
+
+.module-name {
+  font: var(--mat-sys-title-medium);
+  color: var(--md-sys-color-on-surface-variant);
+  white-space: nowrap;
+}
+
+.sede {
+  margin-left: 12px;
+  min-width: 0;
+}
+
+.avatar {
+  width: 32px;
+  height: 32px;
+  border-radius: 50%;
+  object-fit: cover;
+  display: grid;
+  place-items: center;
+
+  &.initials {
+    background: var(--md-sys-color-primary-container);
+    color: var(--md-sys-color-on-primary-container);
+    font: var(--mat-sys-label-large);
+  }
+}
+
+.avatar-btn {
+  --mat-icon-button-state-layer-size: 40px;
+  display: inline-grid;
+  place-items: center;
+}
+
+.user-head {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  padding: 12px 16px;
+  max-width: 280px;
+
+  span {
+    color: var(--md-sys-color-on-surface-variant);
+    font: var(--mat-sys-body-small);
+    overflow-wrap: anywhere;
+  }
+}
+
+.role-badge {
+  align-self: flex-start;
+  margin-top: 6px;
+  padding: 2px 8px;
+  border-radius: 8px;
+  background: var(--md-sys-color-secondary-container);
+  color: var(--md-sys-color-on-secondary-container) !important;
+  font: var(--mat-sys-label-small) !important;
+
+  &.support {
+    background: var(--md-sys-color-tertiary-container);
+    color: var(--md-sys-color-on-tertiary-container) !important;
+  }
+}
+
+.container {
+  flex: 1 1 auto;
+  background: var(--md-sys-color-surface);
+}
+
+.nav {
+  border-right: 1px solid var(--md-sys-color-outline-variant);
+  background: var(--md-sys-color-surface-container-low);
+  width: 280px;
+
+  &.rail {
+    width: 104px;
+    // Rail pegado a la barra superior: sin la esquina redondeada del drawer de M3.
+    --mat-sidenav-container-shape: 0;
+  }
+}
+
+.nav-list {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  padding: 12px;
+}
+
+.drawer-head {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 8px 8px 16px;
+  font: var(--mat-sys-title-medium);
+}
+
+.nav-item {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 4px;
+  border-radius: 999px;
+  color: var(--md-sys-color-on-surface-variant);
+  text-decoration: none;
+  font: var(--mat-sys-label-large);
+
+  .nav-icon {
+    display: grid;
+    place-items: center;
+    width: 56px;
+    height: 32px;
+    border-radius: 16px;
+    flex: none;
+  }
+
+  &:hover .nav-icon {
+    background: color-mix(in srgb, var(--md-sys-color-on-surface) 8%, transparent);
+  }
+
+  &.active {
+    color: var(--md-sys-color-on-surface);
+
+    .nav-icon {
+      background: var(--md-sys-color-secondary-container);
+      color: var(--md-sys-color-on-secondary-container);
+    }
+  }
+}
+
+// Rail (escritorio): ícono arriba, etiqueta abajo, como la navigation rail de M3.
+.rail .nav-item {
+  flex-direction: column;
+  gap: 4px;
+  padding: 4px 0 8px;
+  border-radius: 16px;
+  text-align: center;
+  font: var(--mat-sys-label-medium);
+
+  .nav-label {
+    padding: 0 2px;
+    overflow-wrap: break-word;
+    hyphens: auto;
+  }
+}
+
+.content {
+  display: flex;
+  flex-direction: column;
+}
+
+@media (max-width: 839px) {
+  .module-sep,
+  .module-name {
+    display: none;
+  }
+
+  .nav {
+    width: min(300px, 85vw);
+  }
+}
+
+@media (max-width: 599px) {
+  .brand-name {
+    display: none;
+  }
+
+  .sede {
+    margin-left: 4px;
+  }
+}

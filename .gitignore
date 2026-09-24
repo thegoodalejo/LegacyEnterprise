@@ -1,0 +1,14 @@
+# Estado local de wrangler (Cloudflare CLI) y Firebase CLI
+.wrangler/
+.firebase/
+firebase-debug*.log
+
+# Secretos y llaves: nunca al repo
+.env
+*.env.local
+gh_actions_*
+*-firebase-adminsdk-*.json
+
+# Sistema
+.DS_Store
+Thumbs.db

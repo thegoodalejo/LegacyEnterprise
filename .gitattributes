@@ -1,0 +1,18 @@
+# .gitattributes en la raíz del repo de la app (se crea en la Fase 1).
+# Sin esto, un clon en Windows (core.autocrlf=true) deja los scripts con CRLF y fallan en Linux
+# ("bad interpreter", "$'\r': command not found") cuando se copian a la VPS o a un contenedor.
+* text=auto
+
+*.sh         text eol=lf
+Dockerfile   text eol=lf
+*.yml        text eol=lf
+*.yaml       text eol=lf
+*.sql        text eol=lf
+*.php        text eol=lf
+*.template   text eol=lf
+
+*.png  binary
+*.jpg  binary
+*.webp binary
+*.ico  binary
+*.woff2 binary

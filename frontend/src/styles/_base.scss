@@ -1,0 +1,85 @@
+// src/styles/_base.scss — reglas de UI globales de TODA app (ver references/ui-standards.md).
+// Importar al final de styles.scss:  @use 'styles/base';
+// Solo tokens var(--md-sys-color-*); ningún hexadecimal aquí.
+
+html, body { height: 100%; }
+body {
+  margin: 0;
+  background: var(--md-sys-color-surface);
+  color: var(--md-sys-color-on-surface);
+}
+
+// ---- Página -----------------------------------------------------------------
+.page {
+  padding: 24px;
+  @media (max-width: 599px) { padding: 16px; }
+}
+
+.page-header {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  margin-bottom: 16px;
+
+  h1 { margin: 0; font: var(--mat-sys-headline-small, 400 24px/32px Roboto, sans-serif); }
+  .actions { display: flex; flex-wrap: wrap; gap: 8px; }
+}
+
+// ---- Formularios ------------------------------------------------------------
+// 16px entre campos: con 4–8px el mat-hint quedaba pegado al campo siguiente (LegacyChats 0cb0630).
+.form-grid {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+  width: 100%;          // nunca min-width fijo: desborda el diálogo en móvil
+}
+
+.form-row {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 16px;
+  > * { flex: 1 1 220px; min-width: 0; }
+}
+
+.mat-mdc-form-field { width: 100%; }
+
+// El subscript reserva UNA línea; un hint de dos líneas se solapaba (LegacyChats c886b05).
+// Hints largos: subscriptSizing="dynamic" en el campo.
+.mat-mdc-form-field-subscript-wrapper { line-height: 1.3; }
+
+// ---- Diálogos ---------------------------------------------------------------
+// Abrir siempre con dialogSize() (width 92vw + maxWidth).
+.mat-mdc-dialog-actions {
+  flex-wrap: wrap;
+  gap: 8px;
+}
+.mat-mdc-dialog-content { overflow-wrap: anywhere; }
+// El contenido del diálogo tiene overflow: auto y recorta la etiqueta flotante del primer campo outline.
+.mat-mdc-dialog-content > .form-grid:first-child { padding-top: 8px; }
+
+// ---- Tablas y listas --------------------------------------------------------
+.table-scroll {
+  width: 100%;
+  overflow-x: auto;
+  -webkit-overflow-scrolling: touch;
+  > table { min-width: 100%; }
+}
+
+.empty-state {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 8px;
+  padding: 48px 16px;
+  text-align: center;
+  color: var(--md-sys-color-on-surface-variant);
+}
+
+// ---- Snackbar ---------------------------------------------------------------
+.mdc-snackbar__surface { border-radius: 12px !important; }
+
+// ---- Utilidades -------------------------------------------------------------
+.spacer { flex: 1 1 auto; }
+.muted { color: var(--md-sys-color-on-surface-variant); }
