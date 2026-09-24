@@ -1,10 +1,15 @@
 name: Deploy QA
 
+# Gitflow: push a `qa` = PROBAR. Despliega el backend en QA y deja la BD de QA como copia saneada de PDN
+# (reset-qa-from-prod.sh), luego aplica las migraciones nuevas sobre esos datos reales y recarga Apache.
+# Lo que se cree a mano en QA se pierde en el próximo push a `qa` (wipe intencional, como Kingdom y LegacyChats).
+# QA no publica frontend: se prueba con `ng serve` local apuntando a la API de QA (environment.ts).
 on:
   push:
     branches: [qa]
     paths-ignore: ['docs/**', '**/*.md']
 
+# Nunca cancelar un deploy en curso: si se cortara en medio del import, QA quedaría a medias.
 concurrency:
   group: deploy-qa
   cancel-in-progress: false
@@ -32,8 +37,8 @@ jobs:
           chmod 600 ~/.ssh/id_ed25519
           ssh-keyscan -H ${{ secrets.VPS_HOST }} >> ~/.ssh/known_hosts 2>/dev/null || true
 
-      # Reintento: el SSH del runner da timeouts intermitentes que se resuelven solos.
-      - name: Sincronizar backend y migraciones
+      # Reintento: el SSH del runner da timeouts intermitentes que se resuelven solos (Kingdom QA, 2026-08).
+      - name: Sincronizar backend, migraciones y saneo de QA
         run: |
           SSH="ssh -i ~/.ssh/id_ed25519 -o ConnectTimeout=20"
           DEST="${{ secrets.VPS_USER }}@${{ secrets.VPS_HOST }}:/opt/$APP/$ENV_DIR"
@@ -41,15 +46,20 @@ jobs:
             rsync -az --delete --exclude='.git' --exclude='.env' --exclude='logs/' --exclude='vendor/' \
               -e "$SSH" ./backend/ "$DEST/app/" \
             && rsync -az --delete -e "$SSH" ./database/migrations/ "$DEST/migrations/" \
+            && { [ ! -f database/qa-sanitize.sql ] || rsync -az -e "$SSH" database/qa-sanitize.sql "$DEST/qa-sanitize.sql"; } \
             && exit 0
             echo "Intento $i falló, reintentando en 20s..."; sleep 20
           done
           exit 1
 
-      - name: Migraciones y recarga
+      # UNA sola sesión SSH para copia + migraciones + recarga: varias conexiones seguidas desde el runner
+      # disparaban cortes intermitentes en Kingdom. Orden fijo: copia de PDN → migraciones nuevas → reload.
+      - name: BD de PDN → QA, migraciones y recarga
         run: |
           ssh -i ~/.ssh/id_ed25519 -o ConnectTimeout=20 ${{ secrets.VPS_USER }}@${{ secrets.VPS_HOST }} \
-            "timeout 300 /opt/vps-tools/migrate.sh $APP $ENV_DIR && timeout 30 docker exec ${APP}_php_${SHORT} service apache2 reload"
+            "set -e; timeout 1200 /opt/vps-tools/reset-qa-from-prod.sh $APP --yes --if-prod-exists \
+             && timeout 300 /opt/vps-tools/migrate.sh $APP $ENV_DIR \
+             && timeout 30 docker exec ${APP}_php_${SHORT} service apache2 reload"
 
       - name: Verificar
         run: curl -fsS https://qa.legacyenterprise.legacysoftware.cloud/app_global_status.php

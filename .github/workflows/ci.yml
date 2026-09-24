@@ -1,6 +1,7 @@
 name: CI
 
-# Validación en integración (dev) y en PRs. No despliega ni usa secretos.
+# Gitflow: push a `dev` = INTEGRAR. Valida backend y frontend en cada push a dev y en cada PR.
+# No despliega ni usa secretos: los errores aparecen aquí y no en el deploy de QA.
 on:
   push:
     branches: [dev]
@@ -33,7 +34,7 @@ jobs:
           cache: 'npm'
           cache-dependency-path: frontend/package-lock.json
       # Mismo npm que declara package.json (packageManager): Node 22 trae npm 10 y lee distinto el lockfile.
-      - run: npm install -g "$(node -p "require('./package.json').packageManager")"
+      - run: npm install -g "$(node -p "require('./package.json').packageManager || 'npm@latest'")"
       - run: npm ci
       - run: npx ng lint
       - run: npx ng build --configuration production

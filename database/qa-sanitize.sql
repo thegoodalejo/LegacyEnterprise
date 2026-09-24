@@ -1,0 +1,12 @@
+-- database/qa-sanitize.sql — saneo PROPIO de la app después de copiar PDN → QA (ver references/gitflow.md).
+-- Lo ejecuta /opt/vps-tools/reset-qa-from-prod.sh en cada push a `qa`, DESPUÉS del saneo genérico
+-- (fcm_token / auth_token_hash / auth_token / id_token ya quedan en NULL) y ANTES de las migraciones nuevas.
+-- Reemplazar le_ por el prefijo de tablas. Debe ser idempotente y tolerar tablas que aún no existan en PDN.
+--
+-- Regla: todo lo que en QA podría escribirle a un cliente real o usar credenciales de producción.
+-- Ejemplos reales (LegacyChats, refresh-qa-db.sh):
+--   UPDATE le_whatsapp_numbers SET activo = 0, access_token = '', webhook_verify_token = '';
+--   UPDATE le_campaigns SET estado = 'pausada' WHERE estado IN ('encolada','enviando','esperando_cupo');
+--   UPDATE le_inbound_queue SET estado = 'fallido', error_detalle = 'QA: copia de PDN' WHERE estado IN ('pendiente','procesando');
+--
+-- Sin nada propio que sanear todavía: dejar el archivo con solo comentarios (o no crearlo).

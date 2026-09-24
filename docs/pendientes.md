@@ -11,15 +11,16 @@ Actualizado: 2026-09-24. Identidad, dominios, contenedores y buckets: [infraestr
 | 2. Auth + sedes | ✅ local · ⏳ login real | 24/24 pruebas e2e contra backend local (guard, popup de Google, onboarding con código, panel L5, soporte con marca, accesos L4, gateo por módulo). Falta **tu login real con Google** |
 | 3. Backend + BD | ✅ local · ⏳ VPS | MariaDB 10.11 local: migraciones idempotentes, todo en `utf8mb4_unicode_ci`, 60/60 pruebas `curl` positivas y negativas. Falta crear QA en la VPS (necesita `sudo`) |
 | 4. Archivos + notificaciones | ✅ parcial · ⏳ credenciales | Notificaciones in-app completas (20/20 + UI) y guardia de entorno de R2. Faltan tokens S3 de R2 y clave VAPID para probar subida real y push |
-| 5. CI/CD | ✅ archivos · ⏳ secretos | `ci.yml` (dev/PR), `deploy-qa.yml`, `deploy-pdn.yml` validados; llave de deploy generada. Faltan secretos de GitHub y primer push |
+| 5. CI/CD | ✅ CI en `dev` · ⏳ secretos | `ci.yml` corriendo en GitHub (verde); `deploy-qa.yml` (copia saneada PDN → QA + migraciones) y `deploy-pdn.yml` validados; llave de deploy generada. Faltan secretos y crear `qa`/`pdn` |
 | 6. Hosting + PWA | ✅ config · ⏳ deploy | `firebase.json` probado con el emulador (rewrite, manifest, íconos, bundle apunta solo a la API de PDN). Falta el primer deploy (lo hace el CI de `pdn`) |
 
-Nada está commiteado todavía (rama local `dev`, remoto vacío).
+Código en GitHub en `dev` (repo **público**: no subir secretos ni datos personales).
 
 ## Tus acciones pendientes, en orden
 
-### 1. Revisar y autorizar el primer commit
-Revisa el código y dime si hago el commit inicial en `dev` y el push al repo.
+### 1. ~~Primer commit y push~~ ✅
+Hecho el 2026-09-24: `dev` en GitHub (rama por defecto) y CI en verde. `qa` y `pdn` se crean en los pasos 8 y 9
+(crear la rama dispara su deploy). Gitflow: `CLAUDE.md` → *Gitflow*.
 
 ### 2. Crear QA en la VPS (necesita tu contraseña de `sudo`, una sola vez)
 ```bash
@@ -90,7 +91,13 @@ gh secret set VPS_SSH_KEY --repo $R < ~/.ssh/gh_actions_legacyenterprise
 gh secret set FIREBASE_SERVICE_ACCOUNT --repo $R < ~/Downloads/<cuenta-hosting>.json   # rol "Firebase Hosting Admin"
 gh secret list --repo $R
 ```
-Luego: push a `qa` → `gh run watch` → confirmar que el deploy llegó por CI.
+Luego crear la rama `qa` (= primer deploy de QA por CI) y seguirlo:
+```bash
+git push origin dev:qa
+gh run watch --repo $R --exit-status "$(gh run list --repo $R --workflow 'Deploy QA' --limit 1 --json databaseId -q '.[0].databaseId')"
+```
+Mientras no exista producción, el paso de copia dice `PDN de legacyenterprise aún no existe: QA conserva su BD`
+y el deploy sigue. Cuando exista, cada push a `qa` reemplaza la BD de QA por una copia saneada de PDN.
 
 ### 9. Producción (solo con tu confirmación explícita)
 ```bash
@@ -98,7 +105,8 @@ ssh -t legacy-vps '/opt/vps-tools/new-app.sh legacyenterprise production api.leg
 bash infra/bootstrap-env.sh production
 ```
 NPM: `api.legacyenterprise.legacysoftware.cloud` → `legacyenterprise_php_prod:80` + SSL. Tokens R2 prod y FCM en su `.env`.
-Primer push a `pdn` → despliega backend + frontend a `https://legacyenterprise-731cb.web.app`.
+Crear la rama `pdn` (solo con tu OK) → despliega backend + frontend a `https://legacyenterprise-731cb.web.app`:
+`git push origin qa:pdn`.
 
 ### 10. Verificaciones post-deploy
 - `curl -sI https://legacyenterprise-731cb.web.app/ngsw-worker.js` → debe traer `cache-control: no-cache`
@@ -114,7 +122,7 @@ Primer push a `pdn` → despliega backend + frontend a `https://legacyenterprise
 ## Hallazgos fuera de este proyecto
 - **LegacyInSite (producción)** sirve `ngsw-worker.js`, `index.html` y `manifest.webmanifest` con `cache-control: max-age=3600`
   (su `firebase.json` no tiene `headers`): los usuarios pueden quedar hasta 1 h en una versión vieja.
-- **Plantillas de la skill `bootstrap-app`** con bugs encontrados aquí (corregidos en este repo; conviene devolverlos a la skill):
+- **Plantillas de la skill `bootstrap-app`** con bugs encontrados aquí (corregidos aquí y devueltos a la skill en su v3.2, junto con el gitflow estándar):
   1. `auth.guard.ts` → `guestGuard` llama `inject()` después de `await` (NG0203: la página de login no carga).
   2. `db_connection.php` → `SET collation_connection` no alcanza: `? = ''` en `get_mis_sedes.php` falla con "Illegal mix of collations". Fix: `SET NAMES utf8mb4 COLLATE utf8mb4_unicode_ci`.
   3. `ci/deploy-pdn.yml` → Node 20; Angular 22 exige Node ≥ 22.22.

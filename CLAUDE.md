@@ -22,7 +22,18 @@ Detalle y **acciones pendientes del dueño** (comandos exactos): [docs/pendiente
 | 5. CI/CD | ✅ workflows + llave de deploy · faltan secretos de GitHub y primer push |
 | 6. Hosting + PWA | ✅ `firebase.json` probado en emulador · falta primer deploy (CI de `pdn`) |
 
-Gitflow `dev` (default) → `qa` → `pdn`. **No crear commits ni push sin que el dueño lo pida.**
+## Gitflow
+
+| Rama | Significado | Push dispara |
+|---|---|---|
+| `dev` (default) | integrar | `ci.yml`: `php -l`, `ng lint`, build de producción |
+| `qa` | **probar** | `deploy-qa.yml`: backend a QA + **BD de QA = copia saneada de PDN** (`reset-qa-from-prod.sh`) + migraciones nuevas + reload |
+| `pdn` | **desplegar** | `deploy-pdn.yml`: build → backend + migraciones a PDN → Firebase Hosting → verifica versión y `no-cache` |
+
+- Promoción fast-forward: `git push origin dev:qa`, luego `git push origin qa:pdn` (este último solo con confirmación explícita).
+- `qa` y `pdn` todavía **no existen** en el remoto: crearlas dispara su deploy, así que se crean cuando QA/PDN existan en la VPS y estén los secretos.
+- Lo creado a mano en QA se pierde en el siguiente push a `qa` (wipe intencional). Saneo propio: `database/qa-sanitize.sql`.
+- **No crear commits ni push sin que el dueño lo pida.**
 
 ## Frontend — convenciones
 

@@ -1,5 +1,7 @@
 name: Deploy Production
 
+# Gitflow: push a `pdn` = DESPLEGAR a producción (backend en legacy-vps + frontend en Firebase Hosting).
+# Solo se promueve a `pdn` lo que ya pasó por `qa`, y solo con confirmación explícita del dueño.
 on:
   push:
     branches: [pdn]
@@ -32,6 +34,22 @@ jobs:
       - name: Lint PHP
         run: find backend -name '*.php' -print0 | xargs -0 -n1 php -l > /dev/null
 
+      # El frontend se compila ANTES de tocar el servidor: si el build falla, PDN no queda con backend nuevo
+      # y frontend viejo. Node 22 (Angular 22 exige >= 22.22) y el mismo npm que declara package.json:
+      # el npm 10 de Node 22 lee distinto el lockfile y `npm ci` fallaba con bindings de rolldown "Missing".
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          cache: 'npm'
+          cache-dependency-path: frontend/package-lock.json
+
+      - name: Build frontend
+        working-directory: frontend
+        run: |
+          npm install -g "$(node -p "require('./package.json').packageManager || 'npm@latest'")"
+          npm ci
+          npx ng build --configuration production
+
       - name: Configurar SSH
         env:
           SSH_KEY: ${{ secrets.VPS_SSH_KEY }}
@@ -59,19 +77,6 @@ jobs:
           ssh -i ~/.ssh/id_ed25519 -o ConnectTimeout=20 ${{ secrets.VPS_USER }}@${{ secrets.VPS_HOST }} \
             "timeout 300 /opt/vps-tools/migrate.sh $APP $ENV_DIR && timeout 30 docker exec ${APP}_php_${SHORT} service apache2 reload"
 
-      - uses: actions/setup-node@v4
-        with:
-          node-version: '22'
-          cache: 'npm'
-          cache-dependency-path: frontend/package-lock.json
-
-      - name: Build frontend
-        working-directory: frontend
-        run: |
-          npm install -g "$(node -p "require('./package.json').packageManager")"
-          npm ci
-          npx ng build --configuration production
-
       - name: Deploy a Firebase Hosting
         uses: FirebaseExtended/action-hosting-deploy@v0
         with:
@@ -80,8 +85,10 @@ jobs:
           channelId: live
           projectId: legacyenterprise-731cb
 
-      - name: Verificar versión publicada
+      - name: Verificar versión publicada y headers del service worker
         run: |
           V=$(curl -fsS https://api.legacyenterprise.legacysoftware.cloud/app_global_status.php | python3 -c 'import sys,json;print(json.load(sys.stdin)["version"])')
           echo "Backend publicado: $V"
           [ "$V" = "${{ steps.version.outputs.hash }}" ]
+          # Sin no-cache los usuarios quedan pegados a una versión vieja (LegacyInSite servía max-age=3600).
+          curl -fsSI https://legacyenterprise-731cb.web.app/ngsw-worker.js | grep -qi '^cache-control: no-cache'
