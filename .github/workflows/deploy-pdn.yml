@@ -68,6 +68,7 @@ jobs:
       - name: Build frontend
         working-directory: frontend
         run: |
+          npm install -g "$(node -p "require('./package.json').packageManager")"
           npm ci
           npx ng build --configuration production
 
