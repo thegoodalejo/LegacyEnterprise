@@ -1,7 +1,9 @@
 <?php
 // Orígenes permitidos explícitos (nunca '*': hay tokens de por medio).
 $allowedOrigins = [
-    'https://legacyenterprise-731cb.web.app',
+    'https://legacyenterprise.web.app',               // sitio de Hosting de la app (URL pública)
+    'https://legacyenterprise.firebaseapp.com',
+    'https://legacyenterprise-731cb.web.app',         // sitio por defecto del proyecto (no se usa, se deja por compatibilidad)
     'https://legacyenterprise-731cb.firebaseapp.com',
     'http://localhost:4200',
 ];

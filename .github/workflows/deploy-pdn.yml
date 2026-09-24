@@ -96,4 +96,4 @@ jobs:
           echo "Backend publicado: $V"
           [ "$V" = "${{ steps.version.outputs.hash }}" ]
           # Sin no-cache los usuarios quedan pegados a una versión vieja (LegacyInSite servía max-age=3600).
-          curl -fsSI https://legacyenterprise-731cb.web.app/ngsw-worker.js | grep -qi '^cache-control: no-cache'
+          curl -fsSI https://legacyenterprise.web.app/ngsw-worker.js | grep -qi '^cache-control: no-cache'

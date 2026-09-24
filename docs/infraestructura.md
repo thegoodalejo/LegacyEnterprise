@@ -75,7 +75,7 @@ Plataforma (L5 = dueño/soporte, is_platform_admin)
 | Base de datos / usuario | `legacyenterprise_qa_db` / `legacyenterprise_qa_user` | `legacyenterprise_prod_db` / `legacyenterprise_prod_user` |
 | `APP_ENV` | `qa` | `production` |
 | API | `qa.legacyenterprise.legacysoftware.cloud` | `api.legacyenterprise.legacysoftware.cloud` |
-| Frontend | no se publica (`ng serve` local contra la API de QA) | Firebase Hosting `legacyenterprise-731cb.web.app` |
+| Frontend | no se publica (`ng serve` local contra la API de QA) | Firebase Hosting, sitio `legacyenterprise` → **`https://legacyenterprise.web.app`** |
 | Buckets R2 | `legacyenterprise-qa`, `legacyenterprise-qa-private` | `legacyenterprise-prod`, `legacyenterprise-prod-private` |
 
 Nombres generados por `new-app.sh` (ver `references/vps-multiapp.md` de la skill): no cambiarlos.
@@ -106,7 +106,9 @@ Nombres generados por `new-app.sh` (ver `references/vps-multiapp.md` de la skill
 
 - Proyecto: `legacyenterprise-731cb` (config web en `frontend/src/environments/*`, pública por diseño).
 - Proveedor **Google** habilitado. Dominios autorizados (verificado): `localhost`,
-  `legacyenterprise-731cb.firebaseapp.com`, `legacyenterprise-731cb.web.app`.
+  `legacyenterprise-731cb.firebaseapp.com`, `legacyenterprise-731cb.web.app`, `legacyenterprise.web.app`,
+  `legacyenterprise.firebaseapp.com`. El ID del proyecto lleva sufijo (`-731cb`, lo pone Firebase y no se puede cambiar);
+  la URL pública es un **segundo sitio de Hosting** `legacyenterprise` en el mismo proyecto (`"site"` en `firebase.json`).
 - Pendiente (usuario, para la Fase 4): clave **VAPID**.
 - Pendiente (Fase 3–5): cuenta de servicio Admin SDK → `FCM_SERVICE_ACCOUNT_B64` en el `.env` de cada
   entorno; cuenta de servicio de Hosting → secret `FIREBASE_SERVICE_ACCOUNT`.

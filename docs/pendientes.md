@@ -123,11 +123,11 @@ ssh -t legacy-vps '/opt/vps-tools/new-app.sh legacyenterprise production api.leg
 bash infra/bootstrap-env.sh production
 ```
 NPM: `api.legacyenterprise.legacysoftware.cloud` → `legacyenterprise_php_prod:80` + SSL. Tokens R2 prod y FCM en su `.env`.
-Crear la rama `pdn` (solo con tu OK) → despliega backend + frontend a `https://legacyenterprise-731cb.web.app`:
+Crear la rama `pdn` (solo con tu OK) → despliega backend + frontend a **`https://legacyenterprise.web.app`**:
 `git push origin qa:pdn`.
 
 ### 10. Verificaciones post-deploy
-- `curl -sI https://legacyenterprise-731cb.web.app/ngsw-worker.js` → debe traer `cache-control: no-cache`
+- `curl -sI https://legacyenterprise.web.app/ngsw-worker.js` → debe traer `cache-control: no-cache`
   (el emulador local no aplica headers; hay que confirmarlo en Hosting real).
 - Login real con Google en la URL pública, instalar la PWA, activar notificaciones y recibir un push de prueba.
 - Subir un logo de empresa desde **Empresas** (prueba R2 real).
