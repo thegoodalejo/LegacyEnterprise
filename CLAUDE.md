@@ -12,15 +12,22 @@ Gerencia) y app switcher estilo Google. Arrancada con la skill `legacy-claude-sk
 
 Detalle y **acciones pendientes del dueño** (comandos exactos): [docs/pendientes.md](docs/pendientes.md).
 
+**Fundación en producción desde el 2026-09-24:**
+- Producción: **https://legacyenterprise.web.app** (Firebase Hosting, sitio `legacyenterprise`) · API `https://api.legacyenterprise.legacysoftware.cloud`
+- QA: API `https://qa.legacyenterprise.legacysoftware.cloud` (frontend local con `npm start`)
+
 | Fase | Estado |
 |---|---|
-| 0. Preflight | ✅ 2026-09-24 |
+| 0. Preflight | ✅ |
 | 1. Shell + UI | ✅ build + lint + Playwright 375/1280 sin errores de consola |
-| 2. Auth + sedes | ✅ verificado e2e contra backend local · falta login real con Google |
-| 3. Backend + BD | ✅ verificado local (60/60 curl) · falta crear QA/PDN en la VPS (`new-app.sh` necesita sudo) |
-| 4. Archivos + notificaciones | ✅ notificaciones in-app + guardia R2 · faltan tokens S3 de R2 y clave VAPID |
-| 5. CI/CD | ✅ workflows + llave de deploy · faltan secretos de GitHub y primer push |
-| 6. Hosting + PWA | ✅ `firebase.json` probado en emulador · falta primer deploy (CI de `pdn`) |
+| 2. Auth + sedes | ✅ e2e local + login real con Google contra QA (dueño marcado L5 en QA) |
+| 3. Backend + BD | ✅ QA y PDN en `legacy-vps`, migraciones 001–002, NPM + Let's Encrypt (hosts 6 y 7) |
+| 4. Archivos + notificaciones | ✅ R2 y FCM verificados de verdad en QA y PDN (tokens aislados por entorno) |
+| 5. CI/CD | ✅ `dev`/`qa`/`pdn` con deploy automático; copia PDN → QA probada en CI |
+| 6. Hosting + PWA | ✅ publicado por CI, `no-cache` verificado, bundle apunta solo a la API de PDN |
+
+Cierre pendiente del dueño (login en PDN para marcarlo L5, limpieza de llaves): [docs/pendientes.md](docs/pendientes.md).
+El siguiente trabajo ya es de producto (módulos: CRM, Agenda, …).
 
 ## Gitflow
 
@@ -30,8 +37,11 @@ Detalle y **acciones pendientes del dueño** (comandos exactos): [docs/pendiente
 | `qa` | **probar** | `deploy-qa.yml`: backend a QA + **BD de QA = copia saneada de PDN** (`reset-qa-from-prod.sh`) + migraciones nuevas + reload |
 | `pdn` | **desplegar** | `deploy-pdn.yml`: build → backend + migraciones a PDN → Firebase Hosting → verifica versión y `no-cache` |
 
-- Promoción fast-forward: `git push origin dev:qa`, luego `git push origin qa:pdn` (este último solo con confirmación explícita).
-- `qa` y `pdn` todavía **no existen** en el remoto: crearlas dispara su deploy, así que se crean cuando QA/PDN existan en la VPS y estén los secretos.
+- Promoción fast-forward: `git push origin dev:qa`, luego `git push origin refs/remotes/origin/qa:refs/heads/pdn`
+  (este último solo con confirmación explícita del dueño; sin rama `qa` local, se promueve desde `origin/qa`).
+- Si un push no trae cambios fuera de `docs/**`/`*.md` (o la rama queda idéntica a `dev`), el deploy no se dispara:
+  lanzarlo a mano con `gh workflow run "Deploy QA" --ref qa` / `gh workflow run "Deploy Production" --ref pdn`
+  (la guardia del workflow impide desplegar otra rama).
 - Lo creado a mano en QA se pierde en el siguiente push a `qa` (wipe intencional). Saneo propio: `database/qa-sanitize.sql`.
 - **No crear commits ni push sin que el dueño lo pida.**
 

@@ -2,21 +2,31 @@
 
 Actualizado: 2026-09-24. Identidad, dominios, contenedores y buckets: [infraestructura.md](infraestructura.md).
 
-## Estado por fase
+## Estado: fundación en producción ✅
 
 | Fase | Estado | Cómo se verificó |
 |---|---|---|
 | 0. Preflight | ✅ | Decisiones en `infraestructura.md`; buckets R2 creados y comprobados (privados sin URL pública) |
 | 1. Shell + UI | ✅ | `ng build` + `ng lint` + Playwright a 375/1280: sin scroll horizontal, 0 errores de consola, marca blanca y tema oscuro |
-| 2. Auth + sedes | ✅ local · ⏳ login real | 24/24 pruebas e2e contra backend local (guard, popup de Google, onboarding con código, panel L5, soporte con marca, accesos L4, gateo por módulo). Falta **tu login real con Google** |
-| 3. Backend + BD | ✅ local · ⏳ VPS | MariaDB 10.11 local: migraciones idempotentes, todo en `utf8mb4_unicode_ci`, 60/60 pruebas `curl` positivas y negativas. Falta crear QA en la VPS (necesita `sudo`) |
-| 4. Archivos + notificaciones | ✅ parcial · ⏳ credenciales | Notificaciones in-app completas (20/20 + UI) y guardia de entorno de R2. Faltan tokens S3 de R2 y clave VAPID para probar subida real y push |
-| 5. CI/CD | ✅ CI en `dev` · ⏳ secretos | `ci.yml` corriendo en GitHub (verde); `deploy-qa.yml` (copia saneada PDN → QA + migraciones) y `deploy-pdn.yml` validados; llave de deploy generada. Faltan secretos y crear `qa`/`pdn` |
-| 6. Hosting + PWA | ✅ config · ⏳ deploy | `firebase.json` probado con el emulador (rewrite, manifest, íconos, bundle apunta solo a la API de PDN). Falta el primer deploy (lo hace el CI de `pdn`) |
+| 2. Auth + sedes | ✅ | 24/24 e2e contra backend local + **login real con Google contra QA** (usuario creado por el handshake, marcado L5 con auditoría) |
+| 3. Backend + BD | ✅ | 60/60 `curl` en local; QA y PDN en `legacy-vps` con migraciones 001–002, 9 tablas `utf8mb4_unicode_ci`, HTTPS Let's Encrypt, CORS, 401/403 |
+| 4. Archivos + notificaciones | ✅ | R2 real en QA y PDN (público, privado con URL firmada, **cada token recibe 403 en los buckets del otro entorno**); FCM autenticado en ambos |
+| 5. CI/CD | ✅ | `dev` → CI verde; `qa` → deploy con **copia saneada PDN → QA** verificada; `pdn` → deploy completo en verde |
+| 6. Hosting + PWA | ✅ | **https://legacyenterprise.web.app** 200, rutas internas 200, `no-cache` en SW/index/manifest/i18n, versión = commit, bundle solo con la API de PDN |
 
-Código en GitHub en `dev` (repo **público**: no subir secretos ni datos personales).
+Código en GitHub (`dev`, `qa`, `pdn`; repo **público**: no subir secretos ni datos personales).
 
-## Tus acciones pendientes, en orden
+## Cierre: lo que queda
+
+1. **Login en producción:** entrar con Google en https://legacyenterprise.web.app y avisar para marcarte L5 en la BD de
+   PDN (misma consulta del paso 4, contra `legacyenterprise_db_prod`). Opcional: instalar la PWA y activar notificaciones
+   para una push de prueba.
+2. **Borrar el usuario temporal de NPM** `claudecode@…` (túnel `ssh -L 8181:127.0.0.1:81 legacy-vps` → Users).
+3. **Borrar llaves ya cargadas:** `Descargas\legacyenterprise-731cb-firebase-adminsdk-*.json`,
+   `Descargas\legacyenterprise-731cb-df5113a01503.json` y `C:\Users\Alejo\r2-prod.env`
+   (y, fuera de este proyecto, las llaves de LegacyInSite y LegacyChats que siguen en Descargas).
+
+## Registro de lo hecho (referencia para producción y futuras apps)
 
 ### 1. ~~Primer commit y push~~ ✅
 Hecho el 2026-09-24: `dev` en GitHub (rama por defecto) y CI en verde. `qa` y `pdn` se crean en los pasos 8 y 9
@@ -98,7 +108,10 @@ ssh legacy-vps 'cd /opt/legacyenterprise/qa && docker compose up -d'
 ```
 Repetir con `/opt/legacyenterprise/production/.env` cuando exista producción.
 
-### 8. CI/CD: llave de deploy y secretos de GitHub
+### 8. ~~CI/CD: llave de deploy y secretos de GitHub~~ ✅
+Hecho el 2026-09-24: llave `gh_actions_legacyenterprise` autorizada en `dev01` (probada sola con `IdentitiesOnly`),
+4 secretos cargados, rama `qa` creada. El primer deploy no se disparó con el push (rama idéntica a `dev` +
+`paths-ignore`); se agregó `workflow_dispatch` con guardia de rama. Referencia:
 La llave ya está generada en `~/.ssh/gh_actions_legacyenterprise` (propia de esta app, no compartida con otras).
 ```bash
 ssh legacy-vps 'cat >> ~/.ssh/authorized_keys' < ~/.ssh/gh_actions_legacyenterprise.pub
@@ -117,7 +130,10 @@ gh run watch --repo $R --exit-status "$(gh run list --repo $R --workflow 'Deploy
 Mientras no exista producción, el paso de copia dice `PDN de legacyenterprise aún no existe: QA conserva su BD`
 y el deploy sigue. Cuando exista, cada push a `qa` reemplaza la BD de QA por una copia saneada de PDN.
 
-### 9. Producción (solo con tu confirmación explícita)
+### 9. ~~Producción~~ ✅
+Hecho el 2026-09-24: `new-app.sh production` (dueño), `bootstrap-env.sh production` + R2/FCM de PDN (agente), NPM
+host 7 + certificado 7, rama `pdn` desde `origin/qa` y `gh workflow run "Deploy Production" --ref pdn` → verde.
+URL pública en un segundo sitio de Hosting (`legacyenterprise`), porque el ID del proyecto lleva sufijo. Referencia:
 ```bash
 ssh -t legacy-vps '/opt/vps-tools/new-app.sh legacyenterprise production api.legacyenterprise.legacysoftware.cloud'
 bash infra/bootstrap-env.sh production

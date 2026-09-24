@@ -77,8 +77,13 @@ Plataforma (L5 = dueño/soporte, is_platform_admin)
 | API | `qa.legacyenterprise.legacysoftware.cloud` | `api.legacyenterprise.legacysoftware.cloud` |
 | Frontend | no se publica (`ng serve` local contra la API de QA) | Firebase Hosting, sitio `legacyenterprise` → **`https://legacyenterprise.web.app`** |
 | Buckets R2 | `legacyenterprise-qa`, `legacyenterprise-qa-private` | `legacyenterprise-prod`, `legacyenterprise-prod-private` |
+| NPM (proxy host / certificado) | 6 / 6 (Let's Encrypt, vence 2026-12-23, renovación automática) | 7 / 7 (ídem) |
+| Backup diario | 02:30 UTC (`/opt/vps-tools/backup.sh`, crontab de `dev01`) | 02:30 UTC |
 
 Nombres generados por `new-app.sh` (ver `references/vps-multiapp.md` de la skill): no cambiarlos.
+Panel de NPM: `ssh -L 8181:127.0.0.1:81 legacy-vps` → `http://localhost:8181` (escucha en el 81 del servidor).
+L5 (dueño de la plataforma): solo por SQL con auditoría en `le_H_admin` (`grant_platform_admin`), en cada entorno.
+QA recibe una copia saneada de PDN en cada deploy de `qa`: los usuarios y el L5 de QA son los de PDN.
 
 ## Cloudflare R2
 
