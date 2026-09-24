@@ -8,6 +8,9 @@ on:
   push:
     branches: [qa]
     paths-ignore: ['docs/**', '**/*.md']
+  # Disparo manual: `gh workflow run "Deploy QA" --ref qa`. Hace falta para el PRIMER deploy: crear `qa` idéntica a
+  # `dev` no dispara el push (con paths-ignore GitHub compara contra la rama por defecto: 0 archivos cambiados).
+  workflow_dispatch:
 
 # Nunca cancelar un deploy en curso: si se cortara en medio del import, QA quedaría a medias.
 concurrency:
@@ -21,6 +24,8 @@ env:
 
 jobs:
   deploy:
+    # Guardia: el disparo manual solo despliega la rama `qa` (nunca `dev` u otra a QA por error).
+    if: github.ref == 'refs/heads/qa'
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4

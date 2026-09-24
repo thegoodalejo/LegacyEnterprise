@@ -6,6 +6,9 @@ on:
   push:
     branches: [pdn]
     paths-ignore: ['docs/**', '**/*.md']
+  # Disparo manual: `gh workflow run "Deploy Production" --ref pdn`. Hace falta para el PRIMER deploy (crear `pdn`
+  # idéntica a la rama por defecto no dispara el push por el paths-ignore).
+  workflow_dispatch:
 
 concurrency:
   group: deploy-pdn
@@ -18,6 +21,8 @@ env:
 
 jobs:
   deploy:
+    # Guardia: el disparo manual solo despliega la rama `pdn` (nunca `dev` o `qa` directo a producción).
+    if: github.ref == 'refs/heads/pdn'
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
