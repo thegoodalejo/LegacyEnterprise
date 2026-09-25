@@ -30,8 +30,9 @@ Cierre pendiente del dueño (limpieza de llaves y del usuario temporal de NPM): 
 El siguiente trabajo ya es de producto (módulos: CRM, Agenda, …). **CRM v1 de contactos** (Persona/Organización con jerarquía y roles,
 campos personalizados, etiquetas, historial, filtros, acciones en lote, vocabulario por empresa y plantillas por nicho) y **reportes PDF/Excel con
 la marca del cliente**, **oportunidades** (embudo configurable, tablero/lista, catálogo, líneas, notas, informe del embudo) y **ventas importadas**
-desde Excel/CSV (asistente con revisión previa, lotes revertibles, análisis por cliente/ítem/mes): definición, decisiones, hoja de ruta
-(oportunidades ✅ → ventas ✅ → metas) y pendientes en [docs/modulos/crm.md](docs/modulos/crm.md).
+desde Excel/CSV (asistente con revisión previa, lotes revertibles, análisis por cliente/ítem/mes) y **metas paramétricas** (métricas por empresa;
+metas de empresa, sede y organización con avance, ritmo esperado, cobertura, generación en lote e informe; panel en Oportunidades): definición,
+decisiones, hoja de ruta (oportunidades ✅ → ventas ✅ → metas ✅) y pendientes en [docs/modulos/crm.md](docs/modulos/crm.md).
 
 ## Gitflow
 

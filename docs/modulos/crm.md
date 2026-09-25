@@ -3,8 +3,9 @@
 > Documento vivo del CRM. Estado: **v1 de contactos** — contactos Persona/Organización con jerarquía, roles configurables,
 > campos personalizados, etiquetas, historial, filtros, búsqueda en relacionados, acciones en lote, vocabulario por empresa
 > y plantillas por nicho, más **reportes PDF/Excel con la marca del cliente** y **oportunidades** (embudo configurable, tablero y lista,
-> catálogo de ítems, líneas, notas, cierre con motivo) y **ventas importadas desde Excel/CSV** (lotes revertibles, análisis por cliente, ítem y mes).
-> Actualizado: 2026-09-25. Metas: plan aprobado, ver *Hoja de ruta*. Actividades y cotizaciones: por definir.
+> catálogo de ítems, líneas, notas, cierre con motivo), **ventas importadas desde Excel/CSV** (lotes revertibles, análisis por cliente, ítem y mes)
+> y **metas paramétricas** (empresa → sede → organización, con avance, ritmo esperado, generación en lote e informe).
+> Actualizado: 2026-09-25. Actividades y cotizaciones: por definir.
 
 ## Objetivo
 
@@ -76,6 +77,8 @@ una tabla base con un solo espacio de ids y una extensión 1–1 por tipo.
 | `crm_oportunidades` | Por **sede**: título, contacto (Persona u Organización), persona de contacto, responsable, embudo/etapa, valor, cierre estimado y real, estado, motivo, descripción, `etapa_desde`, `activo` |
 | `crm_oportunidad_lineas`, `crm_oportunidad_notas` | Líneas (ítem o descripción libre × cantidad × precio) y bitácora de notas (borrado lógico) |
 | `crm_oportunidad_valores`, `crm_oportunidad_tags` | Campos personalizados y etiquetas de las oportunidades (espejo de las de contactos: aquellas tienen FK a `crm_contactos`) |
+| `crm_importaciones`, `crm_ventas`, `crm_venta_lineas`, `crm_import_plantillas` | Ventas importadas por lotes (migración `006`, ver *Ventas importadas*) |
+| `crm_metricas`, `crm_metas` | Qué se mide y cuánto se espera de la empresa, la sede o una organización en un período (migración `007`, ver *Metas*) |
 
 **Ámbitos.** Los contactos son de una **sede** (`id_sede` siempre sale de la sesión). La configuración (campos,
 etiquetas) es de la **empresa**: todas sus sedes comparten el mismo catálogo.
@@ -279,6 +282,142 @@ tres modos, NIT con puntos y sin dígito de verificación, errores por fila, sim
 vistas, permisos y aislamiento entre sedes) y Playwright con un `.xlsx` real (título antes del encabezado, 83 filas, cliente inexistente y fecha rota)
 y un CSV Windows-1252 con `;` y coma decimal reconocido por nombre.
 
+## Metas (fase C)
+
+Las metas dicen **cuánto** se espera lograr, **de quién** y **en qué período**, y el CRM muestra cómo va cada una contra el ritmo esperado a la fecha.
+Son **paramétricas**: cada empresa define primero **qué se mide** (una *métrica*: pesos vendidos, galones de un producto, pacientes atendidos,
+contratos ganados…) y después le pone metas a la empresa, a la sede y a cada organización. El **avance no se guarda**: se calcula al consultar desde
+las ventas importadas y las oportunidades, así que siempre refleja lo último cargado (una importación o una reversión cambian el avance al instante).
+
+### Modelo (migración `007_crm_metas.sql`)
+
+| Tabla | Contenido |
+|---|---|
+| `crm_metricas` | Por **empresa**: nombre (único), **fuente** (qué suma, ver abajo), filtro opcional por **un ítem** o **una categoría** del catálogo (uno u otro), unidad (texto tras los números: «galones», «pacientes»; no aplica a dinero), descripción, orden, activo |
+| `crm_metas` | Métrica, **ámbito** (`empresa` / `sede` / `organizacion`), sede (NULL en las de empresa), organización (`id_contacto`, solo ámbito organización), **período** (`mes`, `trimestre`, `semestre`, `anio`, `personalizado`) ya resuelto en `fecha_inicio` y `fecha_fin`, **valor meta** (> 0, hasta 4 decimales), nota, activo |
+
+- `ambito_ref` (columna generada = organización, o sede, o 0) + `UNIQUE (empresa, métrica, ámbito, ambito_ref, inicio, fin)`: no puede haber dos metas
+  iguales. Una meta eliminada conserva su fila; crearla de nuevo **la reactiva** con los datos nuevos.
+- Índice nuevo en `crm_oportunidades (id_sede, estado, fecha_cierre_real)` para sumar las ganadas por fecha de cierre.
+- `qa-sanitize.sql` reemplaza la **nota** de las metas (texto libre).
+
+### Métricas: qué se puede medir (*Ajustes → Métricas*, L4)
+
+| Fuente (en pantalla) | Qué suma | Fecha que cuenta | Con filtro de ítem o categoría |
+|---|---|---|---|
+| Ventas en dinero (`ventas_valor`) | Total de las ventas activas | Fecha de la venta | Total de las líneas que coinciden |
+| Unidades vendidas (`ventas_unidades`) | Cantidades de las líneas | Fecha de la venta | Cantidades de las líneas que coinciden (conviene filtrar: sin filtro mezcla galones con cuñetes) |
+| Número de ventas (`ventas_numero`) | Documentos de venta | Fecha de la venta | Documentos con al menos una línea que coincide |
+| Clientes con compra (`clientes_compra`) | Clientes distintos con al menos una venta | Fecha de la venta | Clientes que compraron ese ítem o categoría |
+| Valor ganado en oportunidades (`oportunidades_ganadas_valor`) | Valor de las oportunidades **activas** en estado ganada | Fecha de cierre real | Total de sus líneas que coinciden |
+| Cierres ganados (`oportunidades_ganadas_numero`) | Oportunidades ganadas | Fecha de cierre real | Las que tienen una línea que coincide |
+| Altas de oportunidades (`oportunidades_creadas`) | Oportunidades creadas (no archivadas) | Fecha de creación | Las que tienen una línea que coincide |
+
+- Las de dinero se muestran con la moneda de la empresa; las demás como número con su unidad.
+- **La fuente y el filtro se pueden cambiar solo mientras la métrica no tenga metas** (ni siquiera eliminadas): después cambiarían el significado de
+  metas ya puestas (409). El nombre, la unidad, la descripción y el orden se cambian siempre. Para medir otra cosa se crea otra métrica.
+- **Desactivar** una métrica: sus metas siguen contando y se ven; no se le pueden crear metas nuevas.
+- El **orden** de la métrica decide el orden en el panel (a igual período).
+- **Plantillas por nicho** (se agregan al aplicarlas, por nombre; el filtro apunta a un código de ítem o a una categoría de la misma plantilla):
+  - *Pinturas B2B:* Ventas, Pintura arquitectónica (categoría), Vinilo tipo 1 en galón (unidades del ítem `VIN-T1-G`, «galones»), Clientes con compra,
+    Oportunidades ganadas (valor), Oportunidades nuevas.
+  - *Plantas de agua:* Facturación, Mantenimientos preventivos (unidades de `MNT-PREV`, «visitas»), Reparaciones (número de ventas de la categoría),
+    Plantas atendidas, Contratos ganados.
+  - *Clínica estética:* Ventas, Sesiones faciales (unidades de la categoría Facial), Pacientes atendidos, Planes aceptados, Valoraciones nuevas.
+
+### Metas: cuánto, de quién y cuándo
+
+- **Ámbitos:**
+  - **Empresa:** suma **todas las sedes** de la empresa. Es la única excepción al aislamiento por sede y por eso se devuelve **solo el total** (nunca
+    filas ni nombres de otras sedes). La ve cualquier usuario del CRM de cualquier sede de la empresa; la crea un L4 desde cualquiera de ellas.
+  - **Sede:** la de la sesión. Cada sede ve y edita solo las suyas.
+  - **Organización:** una Organización **activa** de la sede. Suma lo suyo **y lo de sus dependientes directos** (una matriz suma sus puntos de venta,
+    igual que la tarjeta de ventas del perfil y el filtro «con dependientes»). No suma a los nietos, ni a las Personas vinculadas (una oportunidad
+    hecha a una Persona no cuenta para su organización).
+- **Períodos:** mes (del 1 al último día), trimestre (ene–mar, abr–jun, jul–sep, oct–dic), semestre, año o **fechas propias** (hasta 3 años). El
+  servidor normaliza siempre: basta mandar cualquier día dentro del período.
+- **Crear** (L4, *Metas → Nueva meta*, o desde el perfil de la organización): métrica activa, de quién, período y valor. La misma meta dos veces → 409
+  «Ya existe una meta de … para … en ese período».
+- **Editar:** valor y nota. **Eliminar** (lógico) y **restaurar**. Métrica, ámbito, dueño y período no cambian: para otro período se crea otra meta.
+- **Historial:** cada creación, cambio de valor o nota, eliminación y restauración queda en `le_H_registros` (`tabla = crm_metas`) con los cambios;
+  las generadas en lote comparten un `lote`.
+
+### Cómo se calcula el avance
+
+- **Fecha de corte:** los datos cuentan hasta el corte, que es **hoy** o, al mirar un mes pasado, **su último día** (así se ve cómo cerró). Nunca
+  después de hoy: al mirar un mes futuro, lo que no ha empezado queda «Por empezar».
+- **Real:** la fuente de la métrica entre el inicio del período y el corte, con el ámbito y el filtro de la meta. Solo ventas **activas** (las
+  revertidas o reemplazadas no cuentan) y oportunidades **activas** (no archivadas).
+- **Porcentaje** = real ÷ meta. **Esperado a la fecha** (ritmo lineal) = meta × días transcurridos ÷ días del período; si el corte es hoy, **hoy aún no
+  cuenta** (el primer día del mes lo esperado es 0). **Proyección al cierre** = real × días del período ÷ días transcurridos. **Faltante** = meta − real,
+  y el panel dice «Faltan X en N días».
+- **Estados:**
+
+| Estado | Regla | En pantalla |
+|---|---|---|
+| Cumplida | real ≥ meta (en cualquier momento, aunque el período no haya terminado) | Relleno del color primario |
+| En ritmo | real ≥ esperado a la fecha | Terciario |
+| En riesgo | real ≥ 90 % de lo esperado (`CRM_META_RIESGO`) | Contorno de error (aviso leve) |
+| Atrasada | menos del 90 % de lo esperado | Relleno de error |
+| No cumplida | el período terminó y real < meta | Texto de error sobre gris |
+| Por empezar | el período aún no empieza | Gris |
+
+  El estado siempre lleva ícono y texto (no depende solo del color). La barra marca con una línea dónde debería ir hoy.
+- **Cobertura:** una meta de sede muestra cuánto suman las metas de sus organizaciones **con la misma métrica y el mismo período** (sin contar dos
+  veces a una dependiente cuyo padre también tiene meta); una de empresa, cuánto suman las metas de sus sedes. Aparece solo si hay metas abajo;
+  en rojo si no alcanzan la meta de arriba. No hay «meta padre»: el árbol se arma por métrica y período.
+- **Grupos de organizaciones:** en el panel y el informe, las metas de organización se agrupan por métrica y período, con el conteo por estado y la
+  suma de metas y de real (de nuevo sin contar dos veces a las dependientes).
+- **Cálculo:** `crmMetaReales` agrupa las metas por métrica, ámbito y período y hace **una consulta por grupo** (las de organización con `GROUP BY`
+  sobre una tabla derivada «la organización y sus dependientes directos»). Tope: 5.000 metas por consulta (`CRM_METAS_CALC_MAX`; si se pasa, 400
+  «Afina el filtro»). Las fechas de venta y de cierre son de calendario; la de creación de una oportunidad es la hora del servidor.
+
+### Pantallas
+
+- **Panel en Oportunidades** (arriba del tablero y la lista, para todos): metas **vigentes hoy** en tres niveles. Se pliega (se recuerda en el
+  navegador) y plegado resume los estados («2 cumplida · 10 atrasada…»). Por nivel muestra dos metas (la de período más corto primero y luego por el
+  orden de la métrica), los grupos de organizaciones y hasta tres «**Piden atención**» (atrasadas, en riesgo o no cumplidas, de peor a mejor ritmo;
+  clic abre el perfil), con «y N más…» y «Ver metas». Sin metas no ocupa lugar (un L4 ve una sugerencia para definirlas).
+- **Página Metas** (`/m/crm/metas`, menú del CRM): navegación **mes a mes** (◂ mes ▸, «Mes actual», «Datos hasta el …»). Arriba el panel completo:
+  tarjetas de empresa y sede con real, meta, porcentaje, barra, esperado, proyección, faltante y cobertura (L4 las edita con el lápiz); grupos y
+  «Piden atención». Abajo la **tabla de metas de organizaciones** vigentes en ese mes: búsqueda, métrica, estado (con conteo), orden por avance, ritmo
+  (más atrasadas primero), meta, real o nombre; paginada; el nombre abre el perfil. L4: «Nueva meta», «Generar por {organizacion}» y editar.
+- **Nueva meta:** métrica, de quién (empresa / sede / organización con buscador), período (tipo + mes/trimestre/semestre + año, o dos fechas; muestra
+  el rango resultante), **referencia** (mismo período del año anterior, período anterior y real a la fecha; un clic la usa como meta), meta (acepta
+  `25.000.000`, `1.234,5` o `25,5` y muestra cómo la leyó) y nota.
+- **Generar por organización** (L4): para un período y una métrica crea una meta por organización de la sede:
+  - **Para:** toda la sede o **solo el primer nivel** (sin organización padre: la meta del grupo ya suma a sus dependientes); filtro opcional por etiquetas.
+  - **Cuánto:** un **valor fijo**, o el **histórico** de cada una (mismo período del año anterior o período anterior, con sus dependientes) **+ crecimiento %**;
+    un **mínimo** opcional para quien no tiene histórico (sin mínimo, esas quedan sin meta). **Redondeo** a 1, 10, …, 1.000.000.
+  - **Si ya tiene meta:** dejarla como está o reemplazar su valor. Una eliminada se reactiva.
+  - **Revisar** simula (nuevas, reemplazadas, se dejan, sin histórico, total y la lista de hasta 200) sin guardar nada; **Guardar N metas** escribe todo
+    en una transacción (historial con un mismo lote y `crm_generar_metas` en `le_H_admin`). Tope: 2.000 organizaciones por generación.
+- **Perfil de la organización:** tarjeta «Metas» con las vigentes (primero), las que empiezan en los próximos 45 días y las terminadas en los últimos 60
+  (hasta 6), cada una con barra, real/meta y estado. L4 crea (con la organización ya elegida) y edita desde ahí.
+
+### Reporte «Avance de metas»
+
+Desde la página de metas: **metas vigentes en el mes que se mira** o **todas las activas** (`crm/export_metas.php`, auditado `crm_exportar` con
+`reporte = metas`). Indicadores por estado; tablas de **empresa** y **sede** (métrica y filtro, período, meta, real, avance, esperado; en Excel además
+proyección y cobertura; si la tabla mezcla dinero y números, una columna «Unidad» y los montos redondeados a los decimales de la moneda);
+**organizaciones por métrica y período** (metas, conteo por estado, suma de metas y de real, avance); y **una tabla por grupo** con cada organización
+(meta, real, avance, faltante, estado; en Excel esperado, proyección, a quién pertenece y nota; en Excel cada grupo es una hoja). Tope del PDF:
+2.000 metas (se pide Excel).
+
+### Permisos
+
+Ver el panel, la página, la tarjeta del perfil y exportar: acceso al módulo. **Crear, editar, eliminar y generar metas, y configurar métricas: L4**
+(`requireRole('L4')` en `save_meta.php`, `generar_metas.php` y `save_metrica.php`).
+
+### Pruebas
+
+`metas-periodo.spec.ts` (rangos, bisiestos, trimestres, semestres, navegación de meses, etiquetas) y `crm-format.spec.ts` (`parseNumero`). A mano:
+API con 82 casos (`scratchpad/api_test_metas.py`: seis fuentes con y sin filtro, empresa que suma otra sede de la misma empresa, dependientes,
+esperado y estados calculados con la fecha del día, mes pasado y futuro, corte, cobertura sin doble conteo, filtros, orden, paginación, 409, reactivar,
+historial, validaciones, permisos L1/L4, otra empresa, panel, referencia, generación con histórico/mínimo/reemplazo/primer nivel/etiquetas, exportación)
+y Playwright (panel plegable, página, meses, nueva meta con referencia, 409, editar, eliminar, generar, PDF y Excel, métricas, perfil, L1 sin
+edición, 375 px y tema oscuro, sin errores de consola). El PDF se revisó convertido a imagen y el Excel con `openpyxl`.
+
 ## Reportes y exportación (PDF / Excel)
 
 **Regla del proyecto:** toda lista o panel del CRM nace con «Exportar» PDF y Excel, y todos los reportes salen del mismo servicio para verse iguales y con la marca del cliente.
@@ -313,6 +452,7 @@ cualquier palabra. Se edita en *Ajustes → Vocabulario* (L4): singular y plural
 empresa de la sede en la que está parado) muestra qué agrega cada una y la aplica **solo agregando lo que falta**: nunca pisa
 vocabulario ya personalizado ni cambia o borra roles, campos o etiquetas existentes (por nombre/clave); es idempotente y devuelve
 {agregados, existentes} por categoría. Queda en `le_H_admin` (`crm_aplicar_plantilla`). Los textos de las plantillas están en español.
+Desde las fases A–C también traen embudo con etapas, motivos de cierre, un catálogo de ejemplo y **métricas de metas** (ver *Metas*).
 
 ## Permisos
 
@@ -325,6 +465,8 @@ vocabulario ya personalizado ni cambia o borra roles, campos o etiquetas existen
 | Editar o eliminar una nota ajena | L2 (la propia: su autor) |
 | Ver ventas, sus análisis y reportes | Acceso al módulo |
 | Importar ventas, revertir importaciones y guardar plantillas de mapeo | L2 |
+| Ver metas (panel, página, perfil) y exportar su informe | Acceso al módulo |
+| Crear, editar, eliminar y generar metas; configurar métricas | L4 |
 | Configurar campos, etiquetas, roles, vocabulario, moneda, embudos, etapas, motivos y catálogo; ver y aplicar plantillas | L4 |
 
 ## API (`backend/crm/`)
@@ -337,15 +479,19 @@ Oportunidades: `list_oportunidades` (`vista` lista o tablero, con resumen), `get
 `save_motivo`, `list_categorias_item`, `save_categoria_item`, `list_items`, `save_item`. `list_historial` acepta `tabla` (`crm_contactos` | `crm_oportunidades`).
 Ventas: `list_ventas` (`vista` lista, clientes, items, categorias o meses; siempre con resumen), `get_venta`, `import_ventas` (`accion` simular, iniciar, bloque o
 finalizar), `list_importaciones`, `revertir_importacion`, `list_import_plantillas`, `save_import_plantilla`, `export_ventas`.
-Helpers en `backend/_lib/_crm.php` (los de campos y etiquetas sirven a contactos y oportunidades vía `crmEntidad`), `_crm_oportunidades.php`, `_crm_ventas.php`, `_historial.php` y `_reportes.php`. Todo con `db_prepare_or_fail`, respuesta
+Metas: `list_metricas`, `save_metrica`, `list_metas` (`vista` lista —filtros, corte, orden, conteo por estado—, panel —tres niveles de un día— o
+referencia —real actual, del período anterior y del mismo período del año anterior—), `save_meta`, `generar_metas` (`accion` simular o guardar), `export_metas`.
+Helpers en `backend/_lib/_crm.php` (los de campos y etiquetas sirven a contactos y oportunidades vía `crmEntidad`), `_crm_oportunidades.php`, `_crm_ventas.php`, `_crm_metas.php`, `_historial.php` y `_reportes.php`. Todo con `db_prepare_or_fail`, respuesta
 `{action, mensaje, data}` y guardado en transacción. `save_vinculo`/`remove_vinculo` están probados pero la UI v0 edita
 los vínculos desde el formulario de la Organización.
 
 ## Frontend (`/m/crm/…`)
 
-`contactos` (listado + filtros + lote), `contactos/:id` (perfil), `oportunidades` (tablero/lista), `oportunidades/:id` (ficha), `ventas` (análisis, detalle,
-importaciones y asistente de importación), `configuracion` (L4: campos,
-etiquetas, embudo, catálogo, roles, vocabulario y plantillas; cada pestaña se crea al abrirla). Diálogos: formulario de contacto, de oportunidad, de cierre,
+`contactos` (listado + filtros + lote), `contactos/:id` (perfil), `oportunidades` (panel de metas + tablero/lista), `oportunidades/:id` (ficha), `ventas` (análisis, detalle,
+importaciones y asistente de importación), `metas` (mes a mes: panel de tres niveles y tabla de organizaciones), `configuracion` (L4: campos,
+etiquetas, embudo, catálogo, métricas, roles, vocabulario y plantillas; cada pestaña se crea al abrirla). Metas: `app-metas-panel` (compacto o completo),
+diálogos de meta y de generación, `app-meta-bar`, `app-meta-estado` y `app-periodo-picker` (`pages/crm/metas-ui.ts`), funciones de período en `metas-periodo.ts`
+y `parseNumero` (`crm-format.ts`: `25.000.000` / `1.234,5` según el idioma). Diálogos: formulario de contacto, de oportunidad, de cierre,
 selector de etiquetas (multi, agrupado, por destino), historial (contactos y oportunidades). Componentes reutilizables:
 `app-contacto-picker` (buscador con autocompletado de un tipo de contacto), `app-item-picker` (ítems del catálogo), `app-campos-form` (campos personalizados),
 `app-tag-chip`, `app-date-input`, `app-export-menu` (botón Exportar). `CrmConfigService.money()` formatea montos con la moneda de la empresa.
@@ -354,7 +500,7 @@ Lectura de archivos: `services/import/import-parse.ts` (funciones puras con prue
 
 ## Cómo probarlo en local
 
-Migraciones 001–006 + `database/dev-seed-crm.sql` (solo desarrollo, **no** se despliega: usuarios con token conocido,
+Migraciones 001–007 + `database/dev-seed-crm.sql` (solo desarrollo, **no** se despliega: usuarios con token conocido,
 61 personas y 20 organizaciones ficticias, con jerarquía y roles, config de los tres pilotos; el embudo y el catálogo se crean aplicando una plantilla
 desde *Ajustes → Plantillas*). Login de prueba en dev:
 `window.__leDev.login('dev-token-l4')` (l5, l4, l2, l1, nocrm, otro). Ver «Desarrollo local» en `pendientes.md`.
@@ -378,7 +524,7 @@ Cada fase se prueba, se despliega y se usa sola. Todo es configurable por empres
 | **0** ✅ | Servicio de reportes con marca del cliente + exportar contactos (esta sección: *Reportes y exportación*) |
 | **A** ✅ | **Oportunidades**: un embudo por empresa configurable (tablas listas para varios), etapas con probabilidad y tipo abierta/ganada/perdida, motivos de cierre; tablero (arrastrar con `@angular/cdk`) + lista; catálogo de ítems (producto/servicio/tratamiento) y líneas por oportunidad; notas; etiquetas y campos personalizados también para oportunidades; vocabulario `oportunidad` e `item`; visibilidad igual que contactos (L2 archiva y ve historial, L4 configura). Migración `005`. |
 | **B** ✅ | **Ventas importadas** por Excel/CSV: `crm_ventas` + líneas + lotes revertibles + plantillas de mapeo de columnas; la organización se identifica por NIT o código de cliente; pestaña «Ventas» en el perfil de la organización. El navegador lee el archivo y envía bloques al servidor. Migración `006`. |
-| **C** | **Metas paramétricas** (empresa → sede → organización): métricas configurables (ventas en monto o cantidad, filtro por ítem o categoría, oportunidades ganadas, clientes con compra), períodos, avance y «esperado a la fecha»; panel superior en Oportunidades. La meta de la empresa suma las sedes de la empresa y muestra **solo el agregado** a todo el CRM (excepción documentada al aislamiento por sede). Migración `007`. |
+| **C** ✅ | **Metas paramétricas** (empresa → sede → organización): métricas configurables (ventas en monto o cantidad, filtro por ítem o categoría, oportunidades ganadas, clientes con compra), períodos, avance y «esperado a la fecha»; panel superior en Oportunidades, página de metas, generación en lote e informe. La meta de la empresa suma las sedes de la empresa y muestra **solo el agregado** a todo el CRM (excepción documentada al aislamiento por sede). Migración `007` (ver *Metas*). |
 
 Las ventas y las metas viven dentro del CRM; sus tablas se piensan para que un futuro módulo de Ventas/Facturación escriba en las mismas.
 
@@ -386,6 +532,10 @@ Las ventas y las metas viven dentro del CRM; sus tablas se piensan para que un f
 
 | Fecha | Decisión |
 |---|---|
+| 2026-09-25 | Metas: la **métrica** (qué se mide: fuente fija en código + filtro opcional por ítem o categoría) va aparte de la **meta** (cuánto, de quién, cuándo); el avance se calcula al consultar, no se guarda |
+| 2026-09-25 | Sin «meta padre»: empresa → sede → organizaciones se arma por métrica y período; la **cobertura** avisa si las metas de abajo no alcanzan. Una organización suma sus dependientes directos; en sumas de grupo no se cuenta dos veces |
+| 2026-09-25 | Ritmo **lineal** (hoy no cuenta si el corte es hoy); «en riesgo» con ≥ 90 % de lo esperado; mirar un mes pasado corta los datos en su último día |
+| 2026-09-25 | Crear, editar, eliminar y generar metas y configurar métricas: L4; la fuente y el filtro de una métrica con metas no cambian (se crea otra) |
 | 2026-09-25 | Reportes PDF/Excel **en el navegador** con carga diferida (`jspdf`, `jspdf-autotable`, `exceljs`), un `ReportSpec` común y la marca del cliente; el logo llega por `reportes/get_marca.php` (sin configurar CORS en R2) |
 | 2026-09-25 | Toda lista o panel del CRM lleva «Exportar»; la exportación de datos personales se audita (`crm_exportar` en `le_H_admin`) y tiene topes (Excel 20.000 filas, PDF 2.000) |
 | 2026-09-25 | Ventas: el navegador lee el archivo y manda bloques ya agrupados; revisión completa en el servidor con transacción revertida antes de guardar; cada carga es un lote revertible (lógico) |
@@ -416,7 +566,11 @@ Las ventas y las metas viven dentro del CRM; sus tablas se piensan para que un f
 aviso, no bloqueo; búsqueda v0 no tolera errores de tipeo; tope de 5.000 por lote.
 
 **Por construir / definir:**
-1. **Metas (fase C)**: plan aprobado, ver *Hoja de ruta*. Actividades y cotizaciones: por definir.
+1. **Actividades y cotizaciones**: por definir.
+1a. Metas (fase C ✅), mejoras posibles: ritmo **estacional** (esperado según la curva del año anterior, no lineal); ámbito **por vendedor** (responsable;
+   el ENUM crece sin migración destructiva); que las oportunidades de Personas vinculadas sumen a su organización; ver en pantalla el historial de una
+   meta (ya se guarda en `le_H_registros`) y la lista de eliminadas (hoy se restaura creándola de nuevo); avisos cuando una meta pasa a atrasada;
+   gráficos en el informe; metas por organización cargadas desde Excel.
 1b. Ventas: reactivar automáticamente lo que un lote revertido había reemplazado; leer `.xls` antiguos; cerrar solos los lotes «En proceso» abandonados
    (hoy se revierten a mano); ventas creadas a mano (hoy solo por archivo; llegarán con Pedidos/Facturación).
 2. **Orden por columna** en el listado (el backend ya lo soporta: `orden`, `dir`).
