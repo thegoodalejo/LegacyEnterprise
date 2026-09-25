@@ -28,8 +28,8 @@ Detalle y **acciones pendientes del dueño** (comandos exactos): [docs/pendiente
 
 Cierre pendiente del dueño (limpieza de llaves y del usuario temporal de NPM): [docs/pendientes.md](docs/pendientes.md).
 El siguiente trabajo ya es de producto (módulos: CRM, Agenda, …). **CRM v1 de contactos** (Persona/Organización con jerarquía y roles,
-campos personalizados, etiquetas, historial, filtros, acciones en lote, vocabulario por empresa y plantillas por nicho):
-definición, decisiones y pendientes en [docs/modulos/crm.md](docs/modulos/crm.md).
+campos personalizados, etiquetas, historial, filtros, acciones en lote, vocabulario por empresa y plantillas por nicho) y **reportes PDF/Excel con
+la marca del cliente** (exportar contactos): definición, decisiones, hoja de ruta (oportunidades → ventas importadas → metas) y pendientes en [docs/modulos/crm.md](docs/modulos/crm.md).
 
 ## Gitflow
 
@@ -64,6 +64,8 @@ definición, decisiones y pendientes en [docs/modulos/crm.md](docs/modulos/crm.m
   adjetivos que dependan del género.
 - **Íconos:** Material Symbols Outlined (fuente por defecto de `mat-icon`). Íconos PWA: `node scripts/generate-icons.mjs`
   desde `docs/brand/`.
+- **Reportes:** toda lista o panel del CRM nace con «Exportar» PDF/Excel (`app-export-menu`). Cada pantalla arma un `ReportSpec` y `ReportService.exportar()` (`src/app/services/reports/`) genera el archivo
+  en el navegador con la marca del cliente (logo, empresa, sede, fecha y hora, usuario, «Generado por LegacyEnterprise»); jsPDF y ExcelJS se cargan solo al exportar (`import()`). Detalle: `docs/modulos/crm.md` → *Reportes y exportación*.
 - `/dev/ui` (solo en desarrollo): muestrario de la base visual y probador de marca blanca.
 
 ## Backend — convenciones
@@ -79,6 +81,7 @@ definición, decisiones y pendientes en [docs/modulos/crm.md](docs/modulos/crm.m
   Historial de un registro de negocio: `auditRegistro()` / `auditRegistroVarios()` (`_lib/_historial.php`) → `le_H_registros`
   (genérica, para todos los módulos); `auditAdmin()` sigue siendo solo para acciones sensibles de plataforma.
 - Módulo con datos personales: enmascarar en `database/qa-sanitize.sql` (tolerando tablas que aún no existan en PDN).
+- Exportaciones de datos personales: la primera página deja `auditAdmin('crm_exportar')`; `reportes/get_marca.php` entrega la marca (logo como data URI leído del bucket público de R2, solo si es de esa empresa).
 - Eliminación de registros de negocio: lógica (`activo = 0`) y restaurable, no `DELETE`.
 
 ## Gotchas
@@ -88,6 +91,9 @@ definición, decisiones y pendientes en [docs/modulos/crm.md](docs/modulos/crm.m
 - `inject()` siempre antes del primer `await` en guards/funciones (NG0203).
 - **No correr `npm install <paquete>` en Windows**: poda del `package-lock.json` los binarios de Linux (`@rolldown/binding-linux-*`)
   y rompe `npm ci` en el CI. Agregar la dependencia a mano en `package.json` y a `package-lock.json` (o instalarla en Linux).
+  Receta que funcionó (2026-09-25, `jspdf`/`exceljs`): copiar `package.json` y el lock a una carpeta temporal, correr ahí `npm install --package-lock-only --ignore-scripts <paquete>`,
+  y **fusionar solo las entradas nuevas** en el lock original (sin tocar las existentes); comprobar que sigan los `@rolldown/binding-linux-*` y correr `npm ci` (valida que el lock y `package.json` coincidan).
+  `npm ci` borra `node_modules`: con `npm start` abierto falla con EBUSY y lo deja a medias; parar antes el servidor de desarrollo.
 - `googleMapsApiKey` (environments) es una key de navegador restringida por referrer (`legacyenterprise.web.app` y `localhost:4200`)
   y a Maps JavaScript + Geocoding; vive en el proyecto `fireapp-ce836`. Un puerto local distinto de 4200 o un dominio nuevo hay que
   agregarlo a la clave (`gcloud services api-keys update`); sin Maps el selector sigue con coordenadas escritas. Detalle: `docs/modulos/crm.md`.

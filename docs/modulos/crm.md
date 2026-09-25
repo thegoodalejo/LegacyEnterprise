@@ -2,8 +2,8 @@
 
 > Documento vivo del CRM. Estado: **v1 de contactos** — contactos Persona/Organización con jerarquía, roles configurables,
 > campos personalizados, etiquetas, historial, filtros, búsqueda en relacionados, acciones en lote, vocabulario por empresa
-> y plantillas por nicho. Actualizado: 2026-09-24.
-> Negocios/embudos, actividades y cotizaciones: por definir (ver *Pendientes*).
+> y plantillas por nicho, más **reportes PDF/Excel con la marca del cliente** (contactos). Actualizado: 2026-09-25.
+> Oportunidades (embudo), ventas importadas y metas: plan aprobado, ver *Hoja de ruta*. Actividades y cotizaciones: por definir.
 
 ## Objetivo
 
@@ -34,7 +34,8 @@ Nombres internos (código, BD, API); lo que ve el usuario sale del **vocabulario
 | **Padre / dependiente** | Una Organización puede pertenecer a otra (matriz → puntos de venta, conjunto → plantas). |
 | **Campo personalizado** | Dato extra que la empresa define para Personas o para Organizaciones (talla, peso, área en m²…). |
 | **Etiqueta** | Marca de color para segmentar contactos, con grupo opcional. |
-| **Negocio / Actividad** | *Por definir* (embudos, etapas, llamadas, visitas, tareas). |
+| **Oportunidad** | Posible venta a un Contacto, con etapa de un embudo (ver *Hoja de ruta*). En pantalla se llama «Oportunidad»: «Negocio» ya es el vocabulario de la organización en la plantilla de pinturas. |
+| **Actividad** | *Por definir* (llamadas, visitas, tareas). |
 
 > **"Organización" y no "Empresa"**: `le_empresas` ya es el tenant que contrata la plataforma (y `empresas/` es ruta de
 > plataforma L5). Usar la misma palabra para dos cosas distintas confundiría código, docs y respuestas.
@@ -162,6 +163,23 @@ por diseño como la de Firebase, y por eso **restringida**. Configurada el 2026-
 
 La API de Google se descarga solo al abrir el selector (`GoogleMapsLoaderService`), nunca con la app.
 
+## Reportes y exportación (PDF / Excel)
+
+**Regla del proyecto:** toda lista o panel del CRM nace con «Exportar» PDF y Excel, y todos los reportes salen del mismo servicio para verse iguales y con la marca del cliente.
+
+- **Se generan en el navegador**, con carga diferida (`jspdf` + `jspdf-autotable` para PDF, `exceljs` para Excel; ~113 kB y ~218 kB transferidos, solo al exportar; el bundle inicial no cambia).
+  El backend PHP no tiene Composer ni librerías de PDF y el CI solo sincroniza archivos: agregarlas exigiría reconstruir el contenedor a mano. Un generador en servidor (reportes programados o por correo) queda para cuando exista Integraciones.
+- **Contrato:** cada pantalla arma un `ReportSpec` (`services/reports/report-spec.ts`: título, filtros en texto, indicadores, tablas resumen y de detalle, columnas tipadas y `solo: 'pdf' | 'xlsx'`)
+  y llama a `ReportService.exportar(spec, formato)`. El PDF lleva pocas columnas y el Excel todas (incluidos los campos personalizados); las fechas y números del Excel son valores reales, no texto.
+- **Marca:** logo de la empresa (respaldo: el de Legacy Enterprise), nombre de empresa y de sede, fecha y hora de generación con zona horaria, usuario, colores de marca en la línea de acento y los encabezados de tabla
+  (texto por contraste), indicadores ejecutivos, «Página X de Y» y, muy pequeño en el pie, «Generado por LegacyEnterprise» con su logo. Fuente estándar Helvetica: los textos del PDF pasan por `pdfSeguro` (Latin-1).
+- **Logo sin CORS:** el bucket público de R2 no tiene CORS, así que `backend/reportes/get_marca.php` (cualquier usuario con sede) baja el logo desde el servidor y lo entrega como data URI, solo si la URL es del bucket público y de esa empresa (guarda contra SSRF; tope 1 MB).
+  WebP se convierte a PNG con `gd`; un SVG se rasteriza en el navegador con un canvas (`report-imagen.ts`). La marca se guarda 5 min por sede en el cliente.
+- **Botón `app-export-menu`:** alcances *selección*, *resultados del filtro* y *todos los registros*; cada uno en Excel o PDF. `crm/export_contactos.php` recibe la misma `seleccion` que las acciones en lote (`{ids}` o `{filtros, excluidos, total_esperado}`),
+  responde por páginas de 1.000 con etiquetas, vínculos y valores personalizados, y devuelve 409 si el total cambió. **Topes:** Excel 20.000 filas (`CRM_EXPORT_MAX`); PDF 2.000 (`PDF_MAX_FILAS`, con aviso).
+- **Datos personales:** la primera página de cada exportación registra `crm_exportar` en `le_H_admin` (usuario, formato, filas, filtros). Quien puede ver el listado puede exportarlo; subirlo a L2 es un `requireRole` en `export_contactos.php`.
+- **Pruebas:** `services/reports/report-format.spec.ts` (`ng test`). A mano se verificó con Playwright: PDF renderizado a imagen y Excel leído con `openpyxl` (logo SVG/PNG/WebP/JPG, sin logo ni colores, español/inglés, 3.080 filas en 1,2 s, 375 y 1280 px).
+
 ## Vocabulario por empresa
 
 Cada empresa nombra a su manera (`crm_vocabulario`): **Contacto** (el registro en general), **Persona** y **Organización**, en
@@ -193,7 +211,8 @@ vocabulario ya personalizado ni cambia o borra roles, campos o etiquetas existen
 
 `list_contactos`, `get_contacto`, `save_contacto`, `bulk_contactos`, `set_contacto_tags`, `save_vinculo`,
 `remove_vinculo`, `list_historial`, `list_campos`, `save_campo`, `list_tags`, `save_tag`, `save_tag_grupo`,
-`list_roles`, `save_rol`, `list_vocabulario`, `save_vocabulario`, `list_plantillas`, `apply_plantilla`, `list_responsables`. Helpers en `backend/_lib/_crm.php` y `_historial.php`. Todo con `db_prepare_or_fail`, respuesta
+`list_roles`, `save_rol`, `list_vocabulario`, `save_vocabulario`, `list_plantillas`, `apply_plantilla`, `list_responsables`, `export_contactos` (más `reportes/get_marca.php`, compartido por todos los reportes).
+Helpers en `backend/_lib/_crm.php`, `_historial.php` y `_reportes.php`. Todo con `db_prepare_or_fail`, respuesta
 `{action, mensaje, data}` y guardado en transacción. `save_vinculo`/`remove_vinculo` están probados pero la UI v0 edita
 los vínculos desde el formulario de la Organización.
 
@@ -201,7 +220,7 @@ los vínculos desde el formulario de la Organización.
 
 `contactos` (listado + filtros + lote), `contactos/:id` (perfil), `configuracion` (L4: campos, etiquetas, roles, vocabulario y
 plantillas). Diálogos: formulario de contacto, selector de etiquetas (multi, agrupado), historial. Componentes reutilizables:
-`app-contacto-picker` (buscador con autocompletado de un tipo de contacto), `app-tag-chip`, `app-date-input`.
+`app-contacto-picker` (buscador con autocompletado de un tipo de contacto), `app-tag-chip`, `app-date-input`, `app-export-menu` (botón Exportar).
 `DialogService.confirm` gana `confirmWord`.
 
 ## Cómo probarlo en local
@@ -220,10 +239,26 @@ Migraciones 001–004 + `database/dev-seed-crm.sql` (solo desarrollo, **no** se 
 | WhatsApp, correo, formularios web, webhooks | Integraciones | Recibe leads y registra conversaciones |
 | Tableros entre sedes | Gerencia | Expone sus indicadores |
 
+## Hoja de ruta (plan aprobado 2026-09-25)
+
+Cada fase se prueba, se despliega y se usa sola. Todo es configurable por empresa (se acepta una configuración inicial larga: se hace una vez por cliente) y todo se exporta a PDF/Excel.
+
+| Fase | Contenido |
+|---|---|
+| **0** ✅ | Servicio de reportes con marca del cliente + exportar contactos (esta sección: *Reportes y exportación*) |
+| **A** | **Oportunidades**: un embudo por empresa configurable (tablas listas para varios), etapas con probabilidad y tipo abierta/ganada/perdida, motivos de cierre; tablero (arrastrar con `@angular/cdk`) + lista; catálogo de ítems (producto/servicio/tratamiento) y líneas por oportunidad; notas; etiquetas y campos personalizados también para oportunidades; vocabulario `oportunidad` e `item`; visibilidad igual que contactos (L2 archiva y ve historial, L4 configura). Migración `005`. |
+| **B** | **Ventas importadas** por Excel/CSV: `crm_ventas` + líneas + lotes revertibles + plantillas de mapeo de columnas; la organización se identifica por NIT o código de cliente; pestaña «Ventas» en el perfil de la organización. El navegador lee el archivo y envía bloques al servidor. Migración `006`. |
+| **C** | **Metas paramétricas** (empresa → sede → organización): métricas configurables (ventas en monto o cantidad, filtro por ítem o categoría, oportunidades ganadas, clientes con compra), períodos, avance y «esperado a la fecha»; panel superior en Oportunidades. La meta de la empresa suma las sedes de la empresa y muestra **solo el agregado** a todo el CRM (excepción documentada al aislamiento por sede). Migración `007`. |
+
+Las ventas y las metas viven dentro del CRM; sus tablas se piensan para que un futuro módulo de Ventas/Facturación escriba en las mismas.
+
 ## Decisiones
 
 | Fecha | Decisión |
 |---|---|
+| 2026-09-25 | Reportes PDF/Excel **en el navegador** con carga diferida (`jspdf`, `jspdf-autotable`, `exceljs`), un `ReportSpec` común y la marca del cliente; el logo llega por `reportes/get_marca.php` (sin configurar CORS en R2) |
+| 2026-09-25 | Toda lista o panel del CRM lleva «Exportar»; la exportación de datos personales se audita (`crm_exportar` en `le_H_admin`) y tiene topes (Excel 20.000 filas, PDF 2.000) |
+| 2026-09-25 | Oportunidades → ventas importadas → metas, en ese orden y dentro del CRM; en pantalla «Oportunidad» (no «Negocio»); la meta de la empresa se muestra solo como total agregado |
 | 2026-09-24 | CRM parametrizable: núcleo fijo + configuración por empresa |
 | 2026-09-24 | Contacto base con dos tipos, **Persona** y **Organización** (patrón party); "Organización" y no "Empresa" (colisión con el tenant) |
 | 2026-09-24 | Una Organización exige ≥ 1 Persona vinculada (regla de aplicación); una Persona puede servir a varias |
@@ -247,11 +282,11 @@ Migraciones 001–004 + `database/dev-seed-crm.sql` (solo desarrollo, **no** se 
 aviso, no bloqueo; búsqueda v0 no tolera errores de tipeo; tope de 5.000 por lote.
 
 **Por construir / definir:**
-1. **Negocios y embudos**, actividades y cotizaciones (el resto del módulo).
+1. **Oportunidades (fase A), ventas importadas (B) y metas (C)**: plan aprobado, ver *Hoja de ruta*. Actividades y cotizaciones: por definir.
 2. **Orden por columna** en el listado (el backend ya lo soporta: `orden`, `dir`).
 3. **Datos personales**: autorización de tratamiento por contacto; en la clínica, la historia clínica queda fuera del CRM.
 4. **Purga del historial** (política de retención a largo plazo, si se necesita).
-5. Importar/exportar contactos (Excel/CSV).
+5. ~~Exportar contactos (Excel/PDF)~~ ✅ 2026-09-25. Falta **importar** contactos desde Excel/CSV (la lectura de archivos llega con la fase B).
 6. Etiquetas con `aplica_a` restringido que ya están asignadas al tipo contrario: hoy se conservan.
 7. Plantillas y nombres por defecto solo en español/inglés; los textos de las plantillas (campos, etiquetas) son en español.
 8. Jerarquía: hoy el filtro «Pertenece a» trae solo los dependientes directos (no todo el árbol).
