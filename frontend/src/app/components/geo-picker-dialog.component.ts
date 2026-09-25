@@ -148,7 +148,7 @@ export class GeoPickerDialogComponent implements AfterViewInit {
         });
         this.marker = new AdvancedMarkerElement({ gmpDraggable: true, position: conPunto ? { lat: this.lat()!, lng: this.lng()! } : null, map: conPunto ? this.map : null });
         this.map.addListener('click', (e: google.maps.MapMouseEvent) => { if (e.latLng) this.mover(e.latLng.lat(), e.latLng.lng()); });
-        this.marker.addListener('dragend', () => {
+        this.marker.addEventListener('gmp-dragend', () => {
           const p = this.marker?.position;
           if (p) this.mover(typeof p.lat === 'function' ? p.lat() : p.lat, typeof p.lng === 'function' ? p.lng() : p.lng, false);
         });

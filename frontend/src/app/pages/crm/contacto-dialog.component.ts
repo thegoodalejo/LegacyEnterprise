@@ -1,4 +1,4 @@
-import { ChangeDetectionStrategy, ChangeDetectorRef, Component, computed, inject, signal } from '@angular/core';
+import { afterNextRender, ChangeDetectionStrategy, ChangeDetectorRef, Component, computed, inject, Injector, signal } from '@angular/core';
 import { FormsModule } from '@angular/forms';
 import { MAT_DIALOG_DATA, MatDialog, MatDialogModule, MatDialogRef } from '@angular/material/dialog';
 import { MatButton, MatIconButton } from '@angular/material/button';
@@ -303,6 +303,7 @@ export class ContactoDialogComponent {
   private loading = inject(LoadingService);
   private i18n = inject(TranslationService);
   private cdr = inject(ChangeDetectorRef);
+  private injector = inject(Injector);
 
   readonly id = this.data.id ?? 0;
   readonly tipo = signal<TipoContacto>(this.data.tipo ?? 'persona');
@@ -364,6 +365,12 @@ export class ContactoDialogComponent {
       this.docTipo = this.tipo() === 'persona' ? 'CC' : 'NIT';
     }
     this.loaded.set(true);
+    // El diálogo intenta enfocar su primer campo al abrirse, pero el formulario aparece cuando terminan de cargar los catálogos:
+    // si llegó tarde, el foco quedó fuera de los campos. Se enfoca el primero una vez pintado (sin robar el foco si ya hay uno).
+    afterNextRender(() => {
+      const primero = document.getElementById(this.esPersona() ? 'f-nombres' : 'f-razon');
+      if (primero && !(document.activeElement instanceof HTMLInputElement)) primero.focus();
+    }, { injector: this.injector });
   }
 
   private fill(d: ContactoDetalle): void {
