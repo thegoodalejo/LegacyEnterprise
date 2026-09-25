@@ -86,6 +86,10 @@ definición, decisiones y pendientes en [docs/modulos/crm.md](docs/modulos/crm.m
 - `@material/material-color-utilities` 0.4 usa imports sin extensión: en Node falla, por eso `npm run theme` empaqueta con esbuild.
 - En esta máquina (Windows PowerShell 5.1) no editar archivos UTF-8 con `Get-Content -Raw`/`Set-Content`: los lee como ANSI y los rompe.
 - `inject()` siempre antes del primer `await` en guards/funciones (NG0203).
+- **No correr `npm install <paquete>` en Windows**: poda del `package-lock.json` los binarios de Linux (`@rolldown/binding-linux-*`)
+  y rompe `npm ci` en el CI. Agregar la dependencia a mano en `package.json` y a `package-lock.json` (o instalarla en Linux).
+- `googleMapsApiKey` (environments) es una key de navegador con restricción por referrer; sin ella el selector de ubicación del
+  CRM queda en modo coordenadas escritas. Pasos y APIs a habilitar: `docs/modulos/crm.md` → *Ubicación en el mapa*.
 - Un `effect()` que llama a algo con `LoadingService.wrap()` va con `untracked(...)`: `wrap` lee sus propias señales y el efecto
   se re-dispara con cada carga de otra pantalla (bucle de recargas y overlay siempre visible).
 - Local en Windows: MariaDB baja a minúsculas los nombres de tabla (`le_H_admin` → `le_h_admin`); en la VPS (Linux) no.

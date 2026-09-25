@@ -56,7 +56,7 @@ una tabla base con un solo espacio de ids y una extensión 1–1 por tipo.
 
 | Tabla | Contenido |
 |---|---|
-| `crm_contactos` | Base: id, `id_sede`, tipo, `nombre_completo`, dirección, ciudad, lat/lng, teléfono, responsable, `activo`, `busqueda` |
+| `crm_contactos` | Base: id, `id_sede`, tipo, `nombre_completo`, dirección, ciudad, **lat/lng (ubicación en el mapa, opcional)**, teléfono, responsable, `activo`, `busqueda` |
 | `crm_contactos_personas` | Extensión: nombres, apellidos, documento, correo, WhatsApp (indicativo + número), fecha de nacimiento |
 | `crm_contactos_organizaciones` | Extensión: razón social, documento (NIT…), correo de facturación, `id_padre` (organización a la que pertenece) |
 | `crm_roles_vinculo` | Roles de vínculo (por **empresa**): nombre, orden, activo |
@@ -135,6 +135,27 @@ Eliminar más de **5** exige escribir la palabra (`ELIMINAR` / `DELETE`). El ser
 sede, rechaza si el total cambió (409) o supera **5.000**, opera en una transacción y responde
 `{procesados, sin_cambios, omitidos}` (p. ej. etiquetas que no aplican al tipo de contacto).
 
+## Ubicación en el mapa
+
+Campo base de **Personas y Organizaciones**, opcional: `lat`/`lng` (DECIMAL(9,6), nulos) junto a `direccion` y `ciudad`, que ya
+existían. Latitud y longitud van **juntas o ninguna** (400 si viene una sola) y se redondean a 6 decimales, así un guardado sin
+cambios no se registra como cambio. El historial muestra **un solo cambio «Ubicación»** (`4.711000, -74.072100` → …), no dos.
+
+El formulario tiene el bloque «Ubicación en el mapa»: **Elegir en el mapa** abre el selector (Google Maps: clic o arrastre del pin,
+búsqueda por dirección con Geocoding, «usar mi ubicación», o coordenadas escritas/pegadas). Al confirmar se guardan las coordenadas y,
+si están vacías, se rellenan `direccion` y `ciudad` con lo que Google reconoce para ese punto (nunca se pisa lo que la persona
+escribió). Sin Google la función sigue: el selector queda en **modo coordenadas escritas** y avisa que el mapa no está
+configurado. El perfil muestra la ubicación con «Abrir en Google Maps» (enlace, no necesita key).
+
+**Key de Google Maps** (`googleMapsApiKey` en `frontend/src/environments/environment*.ts`; vacía por defecto). Es una key de
+navegador, pública por diseño como la de Firebase, por lo que **debe estar restringida**: en Google Cloud → *APIs y servicios*:
+1. Proyecto con **facturación habilitada**; habilitar **Maps JavaScript API** y **Geocoding API** (no hace falta Places).
+2. *Credenciales → Crear clave de API*; restricción de aplicación = **sitios web (referrers HTTP)**:
+   `https://legacyenterprise.web.app/*` y `http://localhost:4200/*`; restricción de API = solo esas dos.
+3. Poner la clave en los tres `environment*.ts` y promover `dev → qa → pdn`. Conviene una alerta de presupuesto.
+
+La API de Google se descarga solo al abrir el selector (`GoogleMapsLoaderService`), nunca con la app.
+
 ## Vocabulario por empresa
 
 Cada empresa nombra a su manera (`crm_vocabulario`): **Contacto** (el registro en general), **Persona** y **Organización**, en
@@ -212,6 +233,7 @@ Migraciones 001–004 + `database/dev-seed-crm.sql` (solo desarrollo, **no** se 
 | 2026-09-24 | Roles de vínculo: lista configurable por empresa (no texto libre) |
 | 2026-09-24 | Vocabulario por empresa (Contacto/Persona/Organización) vía variables globales de i18n; textos sin género |
 | 2026-09-24 | Plantillas por nicho en código (pinturas B2B, plantas de agua, clínica estética): solo agregan, nunca pisan |
+| 2026-09-24 | Ubicación en el mapa: campo base opcional (lat/lng, ya existentes) para Persona y Organización; selector con Google Maps + Geocoding y respaldo con coordenadas escritas |
 
 ## Pendientes y preguntas abiertas
 
@@ -219,6 +241,7 @@ Migraciones 001–004 + `database/dev-seed-crm.sql` (solo desarrollo, **no** se 
 aviso, no bloqueo; búsqueda v0 no tolera errores de tipeo; tope de 5.000 por lote.
 
 **Por construir / definir:**
+0. **Key de Google Maps** en los ambientes (ver *Ubicación en el mapa*): hasta entonces el selector funciona solo con coordenadas escritas.
 1. **Negocios y embudos**, actividades y cotizaciones (el resto del módulo).
 2. **Orden por columna** en el listado (el backend ya lo soporta: `orden`, `dir`).
 3. **Datos personales**: autorización de tratamiento por contacto; en la clínica, la historia clínica queda fuera del CRM.
