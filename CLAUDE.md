@@ -88,8 +88,9 @@ definición, decisiones y pendientes en [docs/modulos/crm.md](docs/modulos/crm.m
 - `inject()` siempre antes del primer `await` en guards/funciones (NG0203).
 - **No correr `npm install <paquete>` en Windows**: poda del `package-lock.json` los binarios de Linux (`@rolldown/binding-linux-*`)
   y rompe `npm ci` en el CI. Agregar la dependencia a mano en `package.json` y a `package-lock.json` (o instalarla en Linux).
-- `googleMapsApiKey` (environments) es una key de navegador con restricción por referrer; sin ella el selector de ubicación del
-  CRM queda en modo coordenadas escritas. Pasos y APIs a habilitar: `docs/modulos/crm.md` → *Ubicación en el mapa*.
+- `googleMapsApiKey` (environments) es una key de navegador restringida por referrer (`legacyenterprise.web.app` y `localhost:4200`)
+  y a Maps JavaScript + Geocoding; vive en el proyecto `fireapp-ce836`. Un puerto local distinto de 4200 o un dominio nuevo hay que
+  agregarlo a la clave (`gcloud services api-keys update`); sin Maps el selector sigue con coordenadas escritas. Detalle: `docs/modulos/crm.md`.
 - Un `effect()` que llama a algo con `LoadingService.wrap()` va con `untracked(...)`: `wrap` lee sus propias señales y el efecto
   se re-dispara con cada carga de otra pantalla (bucle de recargas y overlay siempre visible).
 - Local en Windows: MariaDB baja a minúsculas los nombres de tabla (`le_H_admin` → `le_h_admin`); en la VPS (Linux) no.

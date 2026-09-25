@@ -21,10 +21,9 @@ Código en GitHub (`dev`, `qa`, `pdn`; repo **público**: no subir secretos ni d
 1. ~~**Login en producción y L5**~~ ✅ 2026-09-24: `legacysoftware.co@gmail.com` (id 1) marcado L5 en PDN, auditado en
    `le_H_admin` (`grant_platform_admin`). Llega a QA con la próxima copia saneada (push a `qa`).
    Opcional: instalar la PWA y activar notificaciones para una push de prueba.
-1b. **Key de Google Maps** para el selector de ubicación del CRM: crearla (Maps JavaScript API + Geocoding API, restringida por
-   referrer a `https://legacyenterprise.web.app/*` y `http://localhost:4200/*`) y ponerla en `googleMapsApiKey` de los tres
-   `frontend/src/environments/environment*.ts`. Pasos en `docs/modulos/crm.md` → *Ubicación en el mapa*. Sin ella el selector
-   funciona solo con coordenadas escritas.
+1b. ~~**Key de Google Maps**~~ ✅ 2026-09-24: creada con `gcloud` en `fireapp-ce836` (restringida por referrer y a las APIs Maps
+   JavaScript + Geocoding) y puesta en los tres `environment*.ts`. Detalle y cómo administrarla: `docs/modulos/crm.md` → *Ubicación en
+   el mapa*. Pendiente (opcional): una alerta de presupuesto en la cuenta de facturación.
 2. **Borrar el usuario temporal de NPM** `claudecode@…` (túnel `ssh -L 8181:127.0.0.1:81 legacy-vps` → Users).
 3. **Borrar llaves ya cargadas:** `Descargas\legacyenterprise-731cb-firebase-adminsdk-*.json`,
    `Descargas\legacyenterprise-731cb-df5113a01503.json` y `C:\Users\Alejo\r2-prod.env`

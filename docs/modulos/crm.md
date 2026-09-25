@@ -147,12 +147,18 @@ si están vacías, se rellenan `direccion` y `ciudad` con lo que Google reconoce
 escribió). Sin Google la función sigue: el selector queda en **modo coordenadas escritas** y avisa que el mapa no está
 configurado. El perfil muestra la ubicación con «Abrir en Google Maps» (enlace, no necesita key).
 
-**Key de Google Maps** (`googleMapsApiKey` en `frontend/src/environments/environment*.ts`; vacía por defecto). Es una key de
-navegador, pública por diseño como la de Firebase, por lo que **debe estar restringida**: en Google Cloud → *APIs y servicios*:
-1. Proyecto con **facturación habilitada**; habilitar **Maps JavaScript API** y **Geocoding API** (no hace falta Places).
-2. *Credenciales → Crear clave de API*; restricción de aplicación = **sitios web (referrers HTTP)**:
-   `https://legacyenterprise.web.app/*` y `http://localhost:4200/*`; restricción de API = solo esas dos.
-3. Poner la clave en los tres `environment*.ts` y promover `dev → qa → pdn`. Conviene una alerta de presupuesto.
+**Key de Google Maps** (`googleMapsApiKey` en los tres `frontend/src/environments/environment*.ts`): key de navegador, pública
+por diseño como la de Firebase, y por eso **restringida**. Configurada el 2026-09-24 con `gcloud`:
+- **Proyecto:** `fireapp-ce836` (el único con facturación activa; comparte proyecto y cuenta de facturación con Kingdom, pero es una
+  clave **independiente** con su propio uso). Ahí ya estaban habilitadas *Maps JavaScript API* y *Geocoding API* (Places no se usa).
+- **Clave:** «LegacyEnterprise (Maps, navegador)» (`a612ecc7-3c9e-47d5-8889-efc74b91d177`). Restricción de aplicación = referrers
+  `https://legacyenterprise.web.app/*`, `https://legacyenterprise-731cb.web.app/*` y `http://localhost:4200/*`; restricción de API =
+  solo `maps-backend` y `geocoding-backend`. **Otro puerto local (p. ej. 4201) o dominio nuevo se rechaza** hasta agregarlo:
+  `gcloud services api-keys update a612ecc7-… --project=fireapp-ce836 --allowed-referrers="…lista completa…"`.
+- **Ver/administrar:** `gcloud services api-keys list --project=fireapp-ce836`; uso y cuotas en Cloud Console → *APIs y servicios* →
+  *Credenciales* / *Métricas*. Conviene una alerta de presupuesto en la cuenta de facturación (Maps tiene uso gratuito mensual).
+- **Si Google la rechaza** (dominio no permitido, API deshabilitada, facturación) el selector avisa y sigue funcionando con
+  coordenadas escritas. Para moverla a un proyecto propio: crear otra clave allí, cambiarla en los `environment*.ts` y promover.
 
 La API de Google se descarga solo al abrir el selector (`GoogleMapsLoaderService`), nunca con la app.
 
@@ -241,7 +247,6 @@ Migraciones 001–004 + `database/dev-seed-crm.sql` (solo desarrollo, **no** se 
 aviso, no bloqueo; búsqueda v0 no tolera errores de tipeo; tope de 5.000 por lote.
 
 **Por construir / definir:**
-0. **Key de Google Maps** en los ambientes (ver *Ubicación en el mapa*): hasta entonces el selector funciona solo con coordenadas escritas.
 1. **Negocios y embudos**, actividades y cotizaciones (el resto del módulo).
 2. **Orden por columna** en el listado (el backend ya lo soporta: `orden`, `dir`).
 3. **Datos personales**: autorización de tratamiento por contacto; en la clínica, la historia clínica queda fuera del CRM.
