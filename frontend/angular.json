@@ -31,7 +31,7 @@
               }
             ],
             "styles": ["src/styles.scss"],
-            "allowedCommonJsDependencies": ["qrcode"]
+            "allowedCommonJsDependencies": ["qrcode", "exceljs", "html2canvas", "canvg", "core-js", "raf", "rgbcolor"]
           },
           "configurations": {
             "production": {

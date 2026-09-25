@@ -11,6 +11,8 @@ require_once __DIR__ . '/_historial.php';
 const CRM_TIPOS = ['persona', 'organizacion'];
 const CRM_TIPOS_DATO = ['entero', 'decimal', 'texto', 'booleano', 'fecha'];
 const CRM_BULK_MAX = 5000;          // contactos por operación en lote
+const CRM_EXPORT_MAX = 20000;       // filas por exportación (el PDF se limita más en el navegador)
+const CRM_EXPORT_PAGINA_MAX = 1000; // filas por página al exportar
 const CRM_POR_PAGINA_MAX = 100;
 const CRM_TAGS_LOTE_MAX = 20;
 
@@ -856,6 +858,31 @@ function crmSincronizarVinculos(mysqli $conn, array $ctx, int $idOrg, string $no
             crmLogVinculo($conn, $ctx, 'vinculo_actualizado', $idOrg, $nombreOrg, $idPersona, $f['nombre'], $f['rol']);
         }
     }
+}
+
+/**
+ * WHERE (alias `c` = crm_contactos) de una selección, sin materializar los ids: {ids:[…]} o {filtros:{…}, excluidos:[…]}.
+ * Lo usa la exportación por páginas. Devuelve ['sql' => …, 'types' => …, 'params' => […]].
+ */
+function crmSeleccionWhere(mysqli $conn, array $ctx, array $sel): array
+{
+    if (isset($sel['ids'])) {
+        $ids = crmInts($sel['ids']);
+        if (!$ids) authFail(400, 'No hay contactos seleccionados');
+        if (count($ids) > CRM_BULK_MAX) authFail(400, 'Máximo ' . CRM_BULK_MAX . ' contactos seleccionados. Usa los resultados del filtro.');
+        return ['sql' => 'c.id_sede = ? AND c.id IN (' . crmMarks(count($ids)) . ')', 'types' => 'i' . str_repeat('i', count($ids)), 'params' => [$ctx['id_sede'], ...$ids]];
+    }
+    if (is_array($sel['filtros'] ?? null)) {
+        $f = crmFiltros($conn, $ctx, $sel['filtros']);
+        $excluidos = crmInts($sel['excluidos'] ?? []);
+        if ($excluidos) {
+            $f['sql'] .= ' AND c.id NOT IN (' . crmMarks(count($excluidos)) . ')';
+            $f['types'] .= str_repeat('i', count($excluidos));
+            array_push($f['params'], ...$excluidos);
+        }
+        return $f;
+    }
+    authFail(400, 'Selección inválida');
 }
 
 // ─── Selección en lote ───────────────────────────────────────────────────────────────────────────────────────────

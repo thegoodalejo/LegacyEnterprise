@@ -14,12 +14,14 @@ import { MatOption, MatSelect } from '@angular/material/select';
 import { MatTableModule } from '@angular/material/table';
 import { ContactoPickerComponent } from '../../components/contacto-picker.component';
 import { DateInputComponent } from '../../components/date-input.component';
+import { ExportAlcance, ExportMenuComponent, ExportSolicitud } from '../../components/export-menu.component';
 import { TagChipComponent } from '../../components/tag-chip.component';
 import { TagPickerDialogComponent, TagPickerResult } from '../../components/tag-picker-dialog.component';
 import {
   AccionLote, CampoDef, ContactoFila, CrmService, CrmTag, EstadoFiltro, FiltroCampo, Filtros, ResultadoLote, Seleccion,
-  TipoContacto, UsuarioSede,
+  SeleccionExport, TipoContacto, UsuarioSede,
 } from '../../services/crm.service';
+import { CrmReportService } from '../../services/crm-report.service';
 import { DialogService, dialogSize } from '../../services/dialog.service';
 import { LoadingService } from '../../services/loading.service';
 import { SessionService } from '../../services/session.service';
@@ -49,13 +51,14 @@ const OP_KEY: Record<string, string> = {
   imports: [
     FormsModule, MatButton, MatIconButton, MatCheckbox, MatFormField, MatLabel, MatPrefix, MatSuffix, MatIcon, MatInput,
     MatMenu, MatMenuItem, MatMenuTrigger, MatPaginator, MatSelect, MatOption, MatSlideToggle, MatTableModule, ContactoPickerComponent,
-    DateInputComponent, TagChipComponent, TranslatePipe,
+    DateInputComponent, ExportMenuComponent, TagChipComponent, TranslatePipe,
   ],
   template: `
     <div class="page">
       <header class="page-header">
         <h1>{{ 'crm.contacts.title' | translate }}</h1>
         <div class="actions">
+          <app-export-menu [alcances]="exportAlcances()" [disabled]="!total()" (exportar)="exportar($event)" />
           <button mat-stroked-button id="btn-select-mode" (click)="toggleSelecting()" [attr.aria-pressed]="seleccionando()">
             <mat-icon>{{ seleccionando() ? 'close' : 'checklist' }}</mat-icon>{{ (seleccionando() ? 'crm.select.cancel' : 'crm.select.mode') | translate }}
           </button>
@@ -374,6 +377,7 @@ const OP_KEY: Record<string, string> = {
 })
 export default class ContactosPage {
   private crm = inject(CrmService);
+  private reportes = inject(CrmReportService);
   private loading = inject(LoadingService);
   private dialogs = inject(DialogService);
   private matDialog = inject(MatDialog);
@@ -452,6 +456,15 @@ export default class ContactosPage {
   readonly pageSomeSel = computed(() => this.rows().some(r => this.isSel(r.id)));
   readonly columns = computed(() => [...(this.seleccionando() ? ['sel'] : []), 'nombre', 'contacto', 'relacion', 'tags', 'creado', 'acciones']);
   readonly canDelete = computed(() => this.session.hasMinRole('L2'));
+  /** Qué se puede exportar ahora: la selección (si hay), los resultados del filtro o todo. */
+  readonly exportAlcances = computed<ExportAlcance[]>(() => {
+    const t = (k: string, p?: Record<string, string | number>) => this.i18n.t(k, p);
+    const l: ExportAlcance[] = [];
+    if (this.seleccionando() && this.countSel() > 0) l.push({ id: 'seleccion', etiqueta: t('crm.export.scope_selection', { n: this.countSel() }) });
+    l.push({ id: 'filtro', etiqueta: t('crm.export.scope_filter', { n: this.total() }), deshabilitado: this.total() === 0 });
+    l.push({ id: 'todos', etiqueta: t('crm.export.menu_all') });
+    return l;
+  });
 
   constructor() {
     void this.loadCatalogs();
@@ -592,6 +605,60 @@ export default class ContactosPage {
     return this.modoFiltro()
       ? { filtros: this.filtros(), excluidos: [...this.excluidos()], total_esperado: this.totalEsperado() }
       : { ids: [...this.ids()] };
+  }
+
+  // ─── Exportar (PDF / Excel con la marca del cliente) ───────────────────────────────────────────────────────────
+  async exportar(e: ExportSolicitud): Promise<void> {
+    const t = (k: string, p?: Record<string, string | number>) => this.i18n.t(k, p);
+    let seleccion: SeleccionExport;
+    let filtrosTexto: string[];
+    if (e.alcance === 'seleccion') {
+      seleccion = this.seleccion();
+      filtrosTexto = this.modoFiltro()
+        ? [...this.describirFiltros(), ...(this.excluidos().size ? [t('crm.export.excluded', { n: this.excluidos().size })] : [])]
+        : [t('crm.export.selection_manual', { n: this.countSel() })];
+    } else if (e.alcance === 'filtro') {
+      seleccion = { filtros: this.filtros(), excluidos: [], total_esperado: this.total() };
+      filtrosTexto = this.describirFiltros();
+    } else {
+      seleccion = { filtros: { estado: 'todos' }, excluidos: [] };
+      filtrosTexto = [t('crm.export.scope_all')];
+    }
+    try {
+      const r = await this.loading.wrap(() => this.reportes.exportarContactos({ seleccion, formato: e.formato, filtrosTexto }), { loadingText: t('report.generating') });
+      if (r.ok) return;
+      if (r.limitePdf) await this.dialogs.info({ title: t('report.pdf_limit_title'), message: t('report.pdf_limit', { n: r.limitePdf.total.toLocaleString(this.i18n.lang()), max: r.limitePdf.max.toLocaleString(this.i18n.lang()) }) });
+      else await this.dialogs.error({ title: t('report.error_title'), message: r.mensaje });
+    } catch (err) {
+      console.error('[reportes] no se pudo generar el reporte', err);
+      await this.dialogs.error({ title: t('report.error_title'), message: t('report.error_generic') });
+    }
+  }
+
+  /** Los filtros activos en lenguaje natural, para el encabezado del reporte. */
+  private describirFiltros(): string[] {
+    const t = (k: string, p?: Record<string, string | number>) => this.i18n.t(k, p);
+    const f = this.filtros();
+    const nombreUsuario = (id: number) => this.responsables().find(u => u.id === id)?.nombre ?? String(id);
+    const l: string[] = [t('crm.export.filter_scope')];
+    if (f.q) l.push(`${t('crm.filters.search')}: «${f.q}»`);
+    if (f.tipo) l.push(`${t('crm.filters.type')}: ${t(f.tipo === 'persona' ? 'crm.tipo.personas' : 'crm.tipo.organizaciones')}`);
+    l.push(`${t('crm.filters.status')}: ${t(f.estado === 'activos' ? 'crm.filters.active' : f.estado === 'archivados' ? 'crm.filters.archived' : 'crm.filters.all')}`);
+    if (this.padre()) l.push(`${t('crm.filters.parent')}: ${this.padre()!.nombre}`);
+    if (this.tagsSel().length) {
+      l.push(`${t('crm.filters.tags')}: ${this.tagsSel().map(x => x.nombre).join(', ')}${this.tagsSel().length > 1 ? ` (${t(this.tagsModo() === 'todos' ? 'crm.filters.tags_all' : 'crm.filters.tags_any')})` : ''}`);
+    }
+    if (f.responsable) l.push(`${t('crm.filters.owner')}: ${nombreUsuario(f.responsable)}`);
+    if (f.creado_por) l.push(`${t('crm.filters.created_by')}: ${nombreUsuario(f.creado_por)}`);
+    if (f.creado_desde) l.push(`${t('crm.filters.created_from')}: ${formatDate(f.creado_desde)}`);
+    if (f.creado_hasta) l.push(`${t('crm.filters.created_to')}: ${formatDate(f.creado_hasta)}`);
+    for (const c of f.campos ?? []) {
+      const def = this.camposDef().find(d => d.id === c.id_campo);
+      const valor = c.op === 'entre' ? `${c.valor} - ${c.valor2}` : typeof c.valor === 'boolean' ? t(c.valor ? 'common.yes' : 'common.no') : String(c.valor);
+      l.push(`${def?.etiqueta ?? c.id_campo} ${t('crm.op.' + this.opKey(c.op))} ${valor}`);
+    }
+    if (f.relacionados === false) l.push(t('crm.report.related_off'));
+    return l;
   }
 
   // ─── Acciones sobre contactos ──────────────────────────────────────────────────────────────────────────────────

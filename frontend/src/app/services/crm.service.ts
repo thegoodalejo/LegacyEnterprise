@@ -71,10 +71,23 @@ export interface PersonaRef {
 export interface Advertencia { tipo: 'documento_duplicado'; contactos: { id: number; nombre_completo: string }[] }
 
 export type Seleccion = { ids: number[] } | { filtros: Filtros; excluidos: number[]; total_esperado: number };
-export type AccionLote = 'archivar' | 'restaurar' | 'tags_agregar' | 'tags_quitar';
+/** Como Seleccion, pero exportar «todo» no conoce el total de antemano (el backend solo lo valida si viene). */
+export type SeleccionExport = { ids: number[] } | { filtros: Filtros; excluidos: number[]; total_esperado?: number };
+export type AccionLote ='archivar' | 'restaurar' | 'tags_agregar' | 'tags_quitar';
 export interface ResultadoLote {
   procesados: number; sin_cambios: number; omitidos: { id: number; motivo: string; tag?: string }[]; omitidos_total: number; lote: string;
 }
+
+export interface ExportContacto {
+  id: number; tipo: TipoContacto; nombre_completo: string; direccion: string | null; ciudad: string | null;
+  lat: number | null; lng: number | null; telefono: string | null; activo: boolean; created_at: string; updated_at: string;
+  documento_tipo: string | null; documento_numero: string | null; correo: string | null;
+  whatsapp_indicativo: string | null; whatsapp_numero: string | null; fecha_nacimiento: string | null; padre_nombre: string | null;
+  creado_por: string | null; modificado_por: string | null; responsable: string | null;
+  etiquetas: string[]; vinculos: { nombre: string; rol: string | null; principal: boolean }[]; campos: Record<string, ValorCampo>;
+}
+export interface ExportCampoDef { id: number; aplica_a: TipoContacto; etiqueta: string; tipo_dato: TipoDato }
+export interface PaginaExportContactos { contactos: ExportContacto[]; campos: ExportCampoDef[]; total: number; pagina: number; por_pagina: number }
 
 export interface EntradaHistorial {
   id: number; accion: string; created_at: string; id_usuario: number; usuario: string | null;
@@ -103,6 +116,10 @@ export class CrmService {
   }
   bulk(accion: AccionLote, seleccion: Seleccion, tagIds?: number[]): Promise<ApiResponse<ResultadoLote>> {
     return this.api.post('crm/bulk_contactos.php', { accion, seleccion, tag_ids: tagIds });
+  }
+  /** Una página de contactos para exportar (misma selección que las acciones en lote). La primera deja la auditoría. */
+  exportContactos(seleccion: SeleccionExport, pagina: number, porPagina: number, orden: string, dir: 'asc' | 'desc', formato: 'pdf' | 'xlsx'): Promise<ApiResponse<PaginaExportContactos>> {
+    return this.api.post('crm/export_contactos.php', { seleccion, pagina, por_pagina: porPagina, orden, dir, formato });
   }
   setTags(idContacto: number, tagIds: number[]): Promise<ApiResponse<{ tags: CrmTag[] }>> {
     return this.api.post('crm/set_contacto_tags.php', { id_contacto: idContacto, tag_ids: tagIds });
