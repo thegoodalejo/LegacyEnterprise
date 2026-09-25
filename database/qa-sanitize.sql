@@ -39,6 +39,10 @@ BEGIN
     UPDATE crm_oportunidad_notas SET nota = CONCAT('Nota ', id);
     UPDATE crm_oportunidades SET descripcion = IF(descripcion IS NULL, NULL, CONCAT('Descripción de la oportunidad ', id));
   END IF;
+  -- Metas (migración 007): la nota es texto libre.
+  IF (SELECT COUNT(*) FROM information_schema.tables WHERE table_schema = DATABASE() AND table_name = 'crm_metas') > 0 THEN
+    UPDATE crm_metas SET nota = IF(nota IS NULL, NULL, CONCAT('Nota de la meta ', id));
+  END IF;
 END//
 DELIMITER ;
 CALL le_qa_sanitize_crm();

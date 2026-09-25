@@ -31,9 +31,9 @@ export interface Plantilla {
   id: string; vocabulario: Vocabulario; roles: string[];
   campos: { aplica_a: AplicaA; etiqueta: string; tipo_dato: TipoDato }[];
   grupos: { nombre: string; tags: string[] }[]; tags: string[];
-  embudo: { nombre: string; etapas: string[] } | null; motivos: string[]; items: string[];
+  embudo: { nombre: string; etapas: string[] } | null; motivos: string[]; items: string[]; metricas: string[];
 }
-export type ResultadoPlantilla = Record<'vocabulario' | 'roles' | 'campos' | 'grupos' | 'tags' | 'etapas' | 'motivos' | 'items', { agregados: number; existentes: number }>;
+export type ResultadoPlantilla = Record<'vocabulario' | 'roles' | 'campos' | 'grupos' | 'tags' | 'etapas' | 'motivos' | 'items' | 'metricas', { agregados: number; existentes: number }>;
 
 export interface FiltroCampo { id_campo: number; op: string; valor?: ValorCampo; valor2?: ValorCampo }
 export interface Filtros {
@@ -213,6 +213,60 @@ export interface PaginaExportVentas {
   total: number; pagina: number; por_pagina: number; resumen: ResumenVentas; config: ConfigCrm;
 }
 
+// ─── Metas ───────────────────────────────────────────────────────────────────────────────────────────────────────
+/** De dónde sale el valor real de una métrica (fijo en la app; la empresa elige y filtra). */
+export type FuenteMetrica = 'ventas_valor' | 'ventas_unidades' | 'ventas_numero' | 'clientes_compra' | 'oportunidades_ganadas_valor' | 'oportunidades_ganadas_numero' | 'oportunidades_creadas';
+export type PeriodoMeta = 'mes' | 'trimestre' | 'semestre' | 'anio' | 'personalizado';
+export type AmbitoMeta = 'empresa' | 'sede' | 'organizacion';
+export type EstadoMeta = 'cumplida' | 'en_ritmo' | 'en_riesgo' | 'atrasada' | 'no_cumplida' | 'futura';
+export type FormatoMetrica = 'moneda' | 'numero';
+export interface Metrica {
+  id: number; nombre: string; fuente: FuenteMetrica; formato: FormatoMetrica; id_item: number | null; item_nombre: string | null;
+  id_categoria: number | null; categoria_nombre: string | null; unidad: string | null; descripcion: string | null; orden: number; activo: boolean;
+  /** Metas activas que la usan. */
+  metas: number;
+}
+/** Una meta con su avance calculado a la fecha de corte (el backend no guarda el avance). */
+export interface Meta {
+  id: number; id_metrica: number; metrica_nombre: string; fuente: FuenteMetrica; formato: FormatoMetrica; unidad: string | null; metrica_orden: number; metrica_activa: boolean;
+  /** Ítem o categoría que filtra la métrica. */
+  filtro: string | null;
+  ambito: AmbitoMeta; id_sede: number | null; sede_nombre: string | null; id_contacto: number | null; contacto_nombre: string | null;
+  contacto_activo: boolean | null; id_padre: number | null;
+  periodo: PeriodoMeta; fecha_inicio: string; fecha_fin: string; valor_meta: number; nota: string | null; activo: boolean; created_at: string; updated_at: string;
+  real: number; porcentaje: number; esperado: number; tiempo_pct: number; ritmo: number | null; proyeccion: number | null; faltante: number;
+  dias_total: number; dias_transcurridos: number; estado: EstadoMeta;
+  /** Metas de sede y empresa: cuánto suman las del nivel de abajo con la misma métrica y período. */
+  cobertura?: { n: number; suma: number } | null;
+}
+export type ConteoMetas = Record<EstadoMeta | 'total', number>;
+export interface FiltrosMeta {
+  fecha?: string; desde?: string; hasta?: string; ambito?: AmbitoMeta; id_metrica?: number; id_contacto?: number; q?: string;
+  estado?: 'activas' | 'inactivas' | 'todas'; estado_avance?: EstadoMeta[];
+}
+export type OrdenMeta = 'avance' | 'ritmo' | 'meta' | 'real' | 'nombre' | 'periodo';
+export interface ListaMetas { metas: Meta[]; total: number; pagina: number; por_pagina: number; conteo: ConteoMetas; corte: string; config: ConfigCrm }
+export interface GrupoMetasOrg {
+  id_metrica: number; metrica_nombre: string; metrica_orden: number; dias_total: number; formato: FormatoMetrica; unidad: string | null; filtro: string | null; periodo: PeriodoMeta;
+  fecha_inicio: string; fecha_fin: string; tiempo_pct: number; n: number; meta: number; real: number; esperado: number; porcentaje: number; estados: Record<EstadoMeta, number>;
+}
+export interface PanelMetas {
+  fecha: string; corte: string; empresa: Meta[]; sede: Meta[];
+  organizaciones: { total: number; con_meta: number; activas: number; conteo: ConteoMetas; grupos: GrupoMetasOrg[]; atencion: Meta[]; atencion_total: number };
+  config: ConfigCrm;
+}
+export interface ReferenciaMeta {
+  inicio: string; fin: string; actual: number; formato: FormatoMetrica; config: ConfigCrm;
+  anterior: { inicio: string; fin: string; real: number }; anio_anterior: { inicio: string; fin: string; real: number };
+}
+export type AccionGenerar = 'nueva' | 'reemplazar' | 'omitir' | 'sin_base';
+export interface ResultadoGenerar {
+  nuevas: number; reemplazadas: number; omitidas: number; sin_base: number; suma_meta: number; organizaciones: number; inicio: string; fin: string;
+  base: { inicio: string; fin: string; referencia: string } | null;
+  filas: { id_contacto: number; nombre: string; base: number | null; meta: number; actual: number | null; accion: AccionGenerar }[];
+}
+export interface ExportMetas { metas: Meta[]; total: number; conteo: ConteoMetas; corte: string; config: ConfigCrm }
+
 /** Llamadas del módulo CRM. Cada método devuelve la respuesta cruda del backend ({action, mensaje, data}). */
 @Injectable({ providedIn: 'root' })
 export class CrmService {
@@ -347,4 +401,26 @@ export class CrmService {
   exportVentas(filtros: FiltrosVenta, pagina: number, porPagina: number, formato: 'pdf' | 'xlsx', totalEsperado?: number): Promise<ApiResponse<PaginaExportVentas>> {
     return this.api.post('crm/export_ventas.php', { filtros, pagina, por_pagina: porPagina, formato, total_esperado: totalEsperado });
   }
+
+  // ─── Metas ──────────────────────────────────────────────────────────────────────────────────────────────────────
+  listMetricas(soloActivas = false): Promise<ApiResponse<{ metricas: Metrica[]; config: ConfigCrm }>> {
+    return this.api.post('crm/list_metricas.php', { solo_activas: soloActivas ? 1 : 0 });
+  }
+  saveMetrica(data: Record<string, unknown>): Promise<ApiResponse<Metrica>> { return this.api.post('crm/save_metrica.php', data); }
+  listMetas(filtros: FiltrosMeta, o: { pagina?: number; porPagina?: number; orden?: OrdenMeta; dir?: 'asc' | 'desc'; corte?: string } = {}): Promise<ApiResponse<ListaMetas>> {
+    return this.api.post('crm/list_metas.php', { vista: 'lista', filtros, pagina: o.pagina ?? 1, por_pagina: o.porPagina ?? 25, orden: o.orden ?? 'avance', dir: o.dir ?? 'asc', corte: o.corte });
+  }
+  /** Metas vigentes en `fecha` (por defecto hoy) en tres niveles: empresa, sede y organizaciones. */
+  panelMetas(fecha?: string): Promise<ApiResponse<PanelMetas>> { return this.api.post('crm/list_metas.php', { vista: 'panel', fecha }); }
+  /** Real del período actual, del anterior y del mismo período del año anterior, para decidir cuánto pedir. */
+  referenciaMeta(p: { idMetrica: number; ambito: AmbitoMeta; idContacto?: number | null; periodo: PeriodoMeta; fecha: string; fechaFin?: string | null }): Promise<ApiResponse<ReferenciaMeta>> {
+    return this.api.post('crm/list_metas.php', {
+      vista: 'referencia', id_metrica: p.idMetrica, ambito: p.ambito, id_contacto: p.idContacto ?? undefined, periodo: p.periodo, fecha: p.fecha, fecha_fin: p.fechaFin ?? undefined,
+    });
+  }
+  saveMeta(data: Record<string, unknown>): Promise<ApiResponse<Meta>> { return this.api.post('crm/save_meta.php', data); }
+  generarMetas(accion: 'simular' | 'guardar', data: Record<string, unknown>): Promise<ApiResponse<ResultadoGenerar>> {
+    return this.api.post('crm/generar_metas.php', { accion, ...data });
+  }
+  exportMetas(filtros: FiltrosMeta, formato: 'pdf' | 'xlsx'): Promise<ApiResponse<ExportMetas>> { return this.api.post('crm/export_metas.php', { filtros, formato }); }
 }

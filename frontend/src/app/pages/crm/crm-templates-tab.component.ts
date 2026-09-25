@@ -8,7 +8,7 @@ import { LoadingService } from '../../services/loading.service';
 import { TranslatePipe, TranslationService } from '../../services/translation.service';
 
 const ICONOS: Record<string, string> = { pinturas_b2b: 'format_paint', plantas_agua: 'water_drop', clinica_estetica: 'spa' };
-const CATEGORIAS = ['vocabulario', 'roles', 'campos', 'grupos', 'tags', 'etapas', 'motivos', 'items'] as const;
+const CATEGORIAS = ['vocabulario', 'roles', 'campos', 'grupos', 'tags', 'etapas', 'motivos', 'items', 'metricas'] as const;
 
 /** Pestaña «Plantillas»: arranque por nicho. Solo agrega lo que falta; nunca cambia ni borra lo existente. */
 @Component({
@@ -40,6 +40,7 @@ const CATEGORIAS = ['vocabulario', 'roles', 'campos', 'grupos', 'tags', 'etapas'
                   <li><b>{{ 'crm.tpl.cat.motivos' | translate }}:</b> {{ p.motivos.join(', ') }}</li>
                   <li><b>{{ 'crm.tpl.cat.items' | translate }}:</b> {{ p.items.join(', ') }}</li>
                 }
+                @if (p.metricas.length) { <li><b>{{ 'crm.tpl.cat.metricas' | translate }}:</b> {{ p.metricas.join(', ') }}</li> }
               </ul>
             </div>
             <button mat-flat-button class="apply" [id]="'btn-apply-' + p.id" (click)="apply(p)">{{ 'crm.tpl.apply' | translate }}</button>

@@ -15,6 +15,7 @@ import { LoadingService } from '../../services/loading.service';
 import { TranslatePipe, TranslationService } from '../../services/translation.service';
 import { CrmCatalogoTabComponent } from './crm-catalogo-tab.component';
 import { CrmEmbudoTabComponent } from './crm-embudo-tab.component';
+import { CrmMetricasTabComponent } from './crm-metricas-tab.component';
 import { CrmRolesTabComponent } from './crm-roles-tab.component';
 import { CrmTemplatesTabComponent } from './crm-templates-tab.component';
 import { CrmVocabTabComponent } from './crm-vocab-tab.component';
@@ -247,11 +248,11 @@ export class TagDialogComponent {
 }
 
 // ─── Página ──────────────────────────────────────────────────────────────────────────────────────────────────────
-/** Configuración del CRM por empresa (L4+): campos personalizados, etiquetas, embudo, catálogo, roles, vocabulario y plantillas. */
+/** Configuración del CRM por empresa (L4+): campos personalizados, etiquetas, embudo, catálogo, métricas de metas, roles, vocabulario y plantillas. */
 @Component({
   selector: 'app-crm-config-page',
   changeDetection: ChangeDetectionStrategy.OnPush,
-  imports: [MatButton, MatIconButton, MatIcon, MatTab, MatTabContent, MatTabGroup, TagChipComponent, CrmRolesTabComponent, CrmTemplatesTabComponent, CrmVocabTabComponent, CrmEmbudoTabComponent, CrmCatalogoTabComponent, TranslatePipe],
+  imports: [MatButton, MatIconButton, MatIcon, MatTab, MatTabContent, MatTabGroup, TagChipComponent, CrmRolesTabComponent, CrmTemplatesTabComponent, CrmVocabTabComponent, CrmEmbudoTabComponent, CrmCatalogoTabComponent, CrmMetricasTabComponent, TranslatePipe],
   template: `
     <div class="page">
       <header class="page-header"><h1>{{ 'crm.config.title' | translate }}</h1></header>
@@ -317,6 +318,7 @@ export class TagDialogComponent {
         <!-- Con matTabContent cada pestaña se crea al abrirla: siempre muestra lo último (p. ej. tras aplicar una plantilla). -->
         <mat-tab [label]="'crm.config.funnel' | translate"><ng-template matTabContent><app-crm-embudo-tab /></ng-template></mat-tab>
         <mat-tab [label]="'crm.config.catalog' | translate"><ng-template matTabContent><app-crm-catalogo-tab /></ng-template></mat-tab>
+        <mat-tab [label]="'crm.config.metrics' | translate"><ng-template matTabContent><app-crm-metricas-tab /></ng-template></mat-tab>
         <mat-tab [label]="'crm.config.roles' | translate"><ng-template matTabContent><app-crm-roles-tab /></ng-template></mat-tab>
         <mat-tab [label]="'crm.config.vocab' | translate"><app-crm-vocab-tab /></mat-tab>
         <mat-tab [label]="'crm.config.templates' | translate"><app-crm-templates-tab (applied)="load()" /></mat-tab>

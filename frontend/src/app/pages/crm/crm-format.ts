@@ -44,6 +44,20 @@ export function contrastColor(hex: string | null | undefined): string {
   return lum > 0.55 ? '#000000' : '#ffffff';
 }
 
+/**
+ * Número escrito por el usuario → number (null si vacío, NaN si no se entiende). En español «25.000.000» y «1.234,5» (punto de miles,
+ * coma decimal); en inglés al revés. Un solo separador que no forma grupos de miles se toma como decimal: «25,5», «25.5». Ignora espacios y $.
+ */
+export function parseNumero(s: string | null | undefined, lang = 'es'): number | null {
+  const t = (s ?? '').replace(/[\s$€]/g, '');
+  if (!t) return null;
+  const [miles, dec] = lang === 'en' ? [',', '.'] : ['.', ','];
+  const esc = (c: string) => (c === '.' ? '\\.' : c);
+  if (new RegExp(`^-?\\d{1,3}(${esc(miles)}\\d{3})+(${esc(dec)}\\d+)?$`).test(t)) return Number(t.split(miles).join('').replace(dec, '.'));
+  if (/^-?\d+([.,]\d+)?$/.test(t)) return Number(t.replace(',', '.'));
+  return NaN;
+}
+
 /** Minúsculas y sin tildes, para buscar en listas del lado del cliente. */
 export function normalizeText(s: string): string {
   return s.normalize('NFD').replace(/[̀-ͯ]/g, '').toLowerCase().trim();

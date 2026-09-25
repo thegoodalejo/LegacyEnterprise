@@ -21,6 +21,7 @@ foreach (crmPlantillas() as $id => $t) {
         'embudo' => isset($t['embudo']) ? ['nombre' => $t['embudo']['nombre'], 'etapas' => array_column($t['embudo']['etapas'], 0)] : null,
         'motivos' => array_column($t['motivos'] ?? [], 1),
         'items' => array_column($t['catalogo']['items'] ?? [], 1),
+        'metricas' => array_column($t['metricas'] ?? [], 0),
     ];
 }
 

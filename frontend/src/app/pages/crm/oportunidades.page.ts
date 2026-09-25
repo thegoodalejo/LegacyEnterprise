@@ -33,6 +33,7 @@ import { TranslatePipe, TranslationService } from '../../services/translation.se
 import { formatDate } from './crm-format';
 import { OportunidadCierreDialogComponent, CierreDialogResult, hoyIso } from './oportunidad-cierre-dialog.component';
 import { abrirOportunidadDialog } from './oportunidad-dialog.component';
+import { MetasPanelComponent } from './metas-panel.component';
 import { MoverEvento, OportunidadesBoardComponent } from './oportunidades-board.component';
 import { TranslatedPaginatorIntl } from './translated-paginator-intl';
 
@@ -55,7 +56,7 @@ const VISTA_KEY = 'crm_opp_vista';
   imports: [
     FormsModule, RouterLink, MatButton, MatIconButton, MatButtonToggleGroup, MatButtonToggle, MatCheckbox, MatFormField, MatLabel, MatPrefix, MatSuffix, MatIcon, MatInput,
     MatMenu, MatMenuItem, MatMenuTrigger, MatPaginator, MatSelect, MatOption, MatSlideToggle, MatTableModule, ContactoPickerComponent, DateInputComponent, ExportMenuComponent, TagChipComponent,
-    OportunidadesBoardComponent, TranslatePipe,
+    OportunidadesBoardComponent, MetasPanelComponent, TranslatePipe,
   ],
   template: `
     <div class="page">
@@ -75,6 +76,9 @@ const VISTA_KEY = 'crm_opp_vista';
           <button mat-flat-button id="btn-new-op" (click)="crear()" [disabled]="sinEmbudo()"><mat-icon>add</mat-icon>{{ 'crm.opp.new' | translate }}</button>
         </div>
       </header>
+
+      <!-- Metas vigentes hoy (empresa, sede y organizaciones), plegable. -->
+      <app-metas-panel [compacto]="true" [editable]="esAdmin()" />
 
       @if (sinEmbudo()) {
         <div class="empty-state" id="sin-embudo">

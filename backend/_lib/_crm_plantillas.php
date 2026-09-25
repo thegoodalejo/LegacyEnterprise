@@ -13,6 +13,7 @@
 //   embudo:      ['nombre' => …, 'etapas' => [[nombre, probabilidad, tipo (abierta|ganada|perdida), color], …]]
 //   motivos:     [[tipo (ganada|perdida), nombre], …]
 //   catalogo:    ['categorias' => [nombre, …], 'items' => [[codigo, nombre, categoria|null, unidad, precio de referencia], …]]
+//   metricas:    [[nombre, fuente (ver CRM_META_FUENTES), filtro ('item:CÓDIGO' | 'categoria:Nombre' | null), unidad|null], …]
 
 function crmPlantillas(): array
 {
@@ -57,6 +58,14 @@ function crmPlantillas(): array
                     ['ROD-9', 'Rodillo de 9 pulgadas', 'Accesorios', 'unidad', 18500],
                 ],
             ],
+            'metricas' => [
+                ['Ventas', 'ventas_valor', null, null],
+                ['Pintura arquitectónica', 'ventas_valor', 'categoria:Pintura arquitectónica', null],
+                ['Vinilo tipo 1 en galón', 'ventas_unidades', 'item:VIN-T1-G', 'galones'],
+                ['Clientes con compra', 'clientes_compra', null, 'clientes'],
+                ['Oportunidades ganadas', 'oportunidades_ganadas_valor', null, null],
+                ['Oportunidades nuevas', 'oportunidades_creadas', null, 'oportunidades'],
+            ],
         ],
         'plantas_agua' => [
             'vocabulario' => ['organizacion' => ['Planta', 'Plantas'], 'item' => ['Servicio', 'Servicios']],
@@ -96,6 +105,13 @@ function crmPlantillas(): array
                     ['INS-CLORO', 'Cloro granulado (bulto)', 'Insumos y análisis', 'bulto', 240000],
                 ],
             ],
+            'metricas' => [
+                ['Facturación', 'ventas_valor', null, null],
+                ['Mantenimientos preventivos', 'ventas_unidades', 'item:MNT-PREV', 'visitas'],
+                ['Reparaciones', 'ventas_numero', 'categoria:Reparaciones', 'servicios'],
+                ['Plantas atendidas', 'clientes_compra', null, 'plantas'],
+                ['Contratos ganados', 'oportunidades_ganadas_numero', null, 'contratos'],
+            ],
         ],
         'clinica_estetica' => [
             'vocabulario' => ['contacto' => ['Cliente', 'Clientes'], 'persona' => ['Paciente', 'Pacientes'], 'organizacion' => ['Convenio', 'Convenios'], 'item' => ['Servicio', 'Servicios']],
@@ -134,6 +150,13 @@ function crmPlantillas(): array
                     ['COR-LASER', 'Depilación láser (zona)', 'Corporal', 'sesión', 210000],
                     ['CAP-PLASMA', 'Plasma rico en plaquetas capilar', 'Capilar', 'sesión', 420000],
                 ],
+            ],
+            'metricas' => [
+                ['Ventas', 'ventas_valor', null, null],
+                ['Sesiones faciales', 'ventas_unidades', 'categoria:Facial', 'sesiones'],
+                ['Pacientes atendidos', 'clientes_compra', null, 'pacientes'],
+                ['Planes aceptados', 'oportunidades_ganadas_numero', null, 'planes'],
+                ['Valoraciones nuevas', 'oportunidades_creadas', null, 'valoraciones'],
             ],
         ],
     ];

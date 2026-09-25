@@ -22,6 +22,7 @@ export const routes: Routes = [
       { path: 'm/crm/oportunidades', loadComponent: () => import('./pages/crm/oportunidades.page'), data: { modulo: 'crm' }, resolve: { voc: crmVocabResolver } },
       { path: 'm/crm/oportunidades/:id', loadComponent: () => import('./pages/crm/oportunidad-perfil.page'), data: { modulo: 'crm' }, resolve: { voc: crmVocabResolver } },
       { path: 'm/crm/ventas', loadComponent: () => import('./pages/crm/ventas.page'), data: { modulo: 'crm' }, resolve: { voc: crmVocabResolver } },
+      { path: 'm/crm/metas', loadComponent: () => import('./pages/crm/metas.page'), data: { modulo: 'crm' }, resolve: { voc: crmVocabResolver } },
       { path: 'm/crm/configuracion', loadComponent: () => import('./pages/crm/crm-config.page'), data: { modulo: 'crm', minRole: 'L4' }, resolve: { voc: crmVocabResolver } },
       { path: 'm/:code', loadComponent: () => import('./pages/module/module.page'), data: { moduloFromParam: true } },
       { path: 'm/:code/:section', loadComponent: () => import('./pages/module/module.page'), data: { moduloFromParam: true } },

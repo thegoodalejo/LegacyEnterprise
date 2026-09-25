@@ -7,7 +7,7 @@ import { MatTooltip } from '@angular/material/tooltip';
 import { TagChipComponent } from '../../components/tag-chip.component';
 import { TagPickerDialogComponent, TagPickerResult } from '../../components/tag-picker-dialog.component';
 import { CrmConfigService } from '../../services/crm-config.service';
-import { CampoConValor, ContactoDetalle, CrmService, OportunidadFila, ResumenVentas, VentaFila } from '../../services/crm.service';
+import { CampoConValor, ContactoDetalle, CrmService, Meta, OportunidadFila, ResumenVentas, VentaFila } from '../../services/crm.service';
 import { DialogService, dialogSize } from '../../services/dialog.service';
 import { LoadingService } from '../../services/loading.service';
 import { SessionService } from '../../services/session.service';
@@ -15,6 +15,8 @@ import { TranslatePipe, TranslationService } from '../../services/translation.se
 import { ContactoDialogComponent, ContactoDialogResult } from './contacto-dialog.component';
 import { formatCoords, formatDateTime, initials, isoToDmy, mapsUrl } from './crm-format';
 import { HistorialDialogComponent } from './historial-dialog.component';
+import { abrirMetaDialog } from './meta-dialog.component';
+import { MetaBarComponent, MetaEstadoComponent, periodoDe, valorMetrica } from './metas-ui';
 import { abrirOportunidadDialog } from './oportunidad-dialog.component';
 import { VentaDialogComponent } from './venta-dialog.component';
 import { rangoPeriodo } from './ventas.page';
@@ -23,7 +25,7 @@ import { rangoPeriodo } from './ventas.page';
 @Component({
   selector: 'app-contacto-perfil-page',
   changeDetection: ChangeDetectionStrategy.OnPush,
-  imports: [RouterLink, MatButton, MatIconButton, MatIcon, MatTooltip, TagChipComponent, TranslatePipe],
+  imports: [RouterLink, MatButton, MatIconButton, MatIcon, MatTooltip, TagChipComponent, MetaBarComponent, MetaEstadoComponent, TranslatePipe],
   template: `
     <div class="page">
       @if (d(); as det) {
@@ -155,6 +157,24 @@ import { rangoPeriodo } from './ventas.page';
             </section>
           }
 
+          @if (c.tipo === 'organizacion') {
+            <section class="card" id="profile-goals">
+              <div class="card-head">
+                <h2>{{ 'crm.goals.profile_title' | translate }}</h2>
+                @if (esAdmin()) { <button mat-button id="btn-new-goal" (click)="nuevaMeta()"><mat-icon>add</mat-icon>{{ 'crm.goals.new' | translate }}</button> }
+              </div>
+              @for (m of metas(); track m.id) {
+                <div class="goal">
+                  <div class="goal-t"><strong>{{ m.metrica_nombre }}</strong><span class="muted small">{{ periodoMeta(m) }}</span>
+                    @if (esAdmin()) { <button mat-icon-button class="goal-edit" (click)="editarMeta(m)" [attr.aria-label]="'common.edit' | translate"><mat-icon>edit</mat-icon></button> }</div>
+                  <app-meta-bar [porcentaje]="m.porcentaje" [tiempoPct]="m.tiempo_pct" [estado]="m.estado" [etiqueta]="m.metrica_nombre" />
+                  <div class="goal-n small"><span>{{ fmtMeta(m, m.real) }} {{ 'crm.goals.of' | translate }} {{ fmtMeta(m, m.valor_meta) }} · {{ m.porcentaje }} %</span><app-meta-estado [estado]="m.estado" /></div>
+                </div>
+              } @empty { <p class="muted">{{ 'crm.goals.profile_empty' | translate }}</p> }
+              @if (det.hijas.length && metas().length) { <span class="muted small">{{ 'crm.goals.profile_children' | translate }}</span> }
+            </section>
+          }
+
           @if (det.campos.length) {
             <section class="card">
               <h2>{{ 'crm.form.custom' | translate }}</h2>
@@ -207,6 +227,9 @@ import { rangoPeriodo } from './ventas.page';
     .more-opps { align-self: flex-start; }
     .sales-k { flex-direction: row; flex-wrap: wrap; gap: 8px 24px; margin-bottom: 8px; }
     .sale { width: 100%; border: none; background: none; cursor: pointer; text-align: left; font: inherit; }
+    .goal { display: flex; flex-direction: column; gap: 6px; padding: 10px 0; border-bottom: 1px solid var(--md-sys-color-outline-variant); &:last-of-type { border: none; } }
+    .goal-t { display: flex; align-items: center; flex-wrap: wrap; gap: 4px 8px; overflow-wrap: anywhere; } .goal-edit { margin: -8px 0 -8px auto; }
+    .goal-n { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 6px; }
   `,
 })
 export default class ContactoPerfilPage {
@@ -226,8 +249,10 @@ export default class ContactoPerfilPage {
   readonly ventasRes = signal<ResumenVentas | null>(null);
   readonly ultimasVentas = signal<VentaFila[]>([]);
   readonly oppsTotal = signal(0);
+  readonly metas = signal<Meta[]>([]);
   readonly notFound = signal(false);
   readonly canAudit = computed(() => this.session.hasMinRole('L2'));
+  readonly esAdmin = computed(() => this.session.hasMinRole('L4'));
   readonly ini = computed(() => initials(this.d()?.contacto.nombre_completo ?? ''));
   readonly docLabel = computed(() => {
     const c = this.d()?.contacto;
@@ -246,7 +271,10 @@ export default class ContactoPerfilPage {
   async load(id = Number(this.id())): Promise<void> {
     this.notFound.set(false);
     const r = await this.loading.wrap(() => this.crm.getContacto(id));
-    if (r.action && r.data) { this.d.set(r.data); void this.loadOpps(id); void this.loadVentas(id, r.data.hijas.length > 0); }
+    if (r.action && r.data) {
+      this.d.set(r.data); void this.loadOpps(id); void this.loadVentas(id, r.data.hijas.length > 0);
+      if (r.data.contacto.tipo === 'organizacion') void this.loadMetas(id);
+    }
     else { this.d.set(null); this.notFound.set(true); }
   }
 
@@ -264,6 +292,33 @@ export default class ContactoPerfilPage {
       const r = await this.crm.listVentas({ contacto: id, dependientes: conHijas, desde: rangoPeriodo('12m').desde ?? undefined }, 1, 3, 'fecha', 'desc');
       if (r.action && r.data) { this.ventasRes.set(r.data.resumen); this.ultimasVentas.set(r.data.ventas); }
     } catch { /* la tarjeta no aparece: no impide ver el perfil */ }
+  }
+
+  /**
+   * Metas de esta organización: primero las vigentes (la más corta antes), luego las que empiezan en los próximos 45 días y al final
+   * las terminadas en los últimos 60. Como mucho 6.
+   */
+  private async loadMetas(id: number): Promise<void> {
+    const dia = (n: number) => { const d = new Date(); d.setDate(d.getDate() + n); return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`; };
+    const hoy = dia(0);
+    const grupo = (m: Meta) => (m.fecha_inicio <= hoy && m.fecha_fin >= hoy ? 0 : m.fecha_inicio > hoy ? 1 : 2);
+    try {
+      const r = await this.crm.listMetas({ id_contacto: id, desde: dia(-60), hasta: dia(45) }, { orden: 'periodo', dir: 'desc', porPagina: 50 });
+      if (r.action && r.data) {
+        this.metas.set([...r.data.metas].sort((a, b) => grupo(a) - grupo(b) || (grupo(a) === 2 ? b.fecha_fin.localeCompare(a.fecha_fin) : a.dias_total - b.dias_total || a.fecha_inicio.localeCompare(b.fecha_inicio))).slice(0, 6));
+      }
+    } catch { /* la tarjeta queda vacía: no impide ver el perfil */ }
+  }
+
+  periodoMeta(m: Meta): string { return periodoDe(this.i18n, m); }
+  fmtMeta(m: Meta, n: number | null): string { return valorMetrica(this.cfg, this.i18n.lang(), m.formato, m.unidad, n); }
+  nuevaMeta(): void {
+    const c = this.d()?.contacto;
+    if (c) abrirMetaDialog(this.matDialog, { contacto: { id: c.id, nombre: c.nombre_completo } }).afterClosed().subscribe(ok => { if (ok) void this.loadMetas(c.id); });
+  }
+  editarMeta(m: Meta): void {
+    const c = this.d()?.contacto;
+    if (c) abrirMetaDialog(this.matDialog, { meta: m }).afterClosed().subscribe(ok => { if (ok) void this.loadMetas(c.id); });
   }
 
   verVenta(v: VentaFila): void { this.matDialog.open(VentaDialogComponent, { ...dialogSize('720px'), data: v.id }); }
