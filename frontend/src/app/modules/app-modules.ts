@@ -4,12 +4,16 @@
  * (le_sede_modulos, los administra L5 según contrato) y el switcher muestra solo esos, filtrados
  * además por el rol/privilegio del usuario.
  */
+import type { AccessRule } from '../services/session.service';
+
 export type ModuleCode = 'crm' | 'agenda' | 'servicios' | 'pedidos' | 'integraciones' | 'gerencia';
 
 export interface ModuleNavItem {
   path: string;
   icon: string;
   label: string; // clave i18n
+  /** Solo se muestra a quien cumpla la regla (misma que usa el guard de la ruta). */
+  rule?: AccessRule;
 }
 
 export interface AppModule {
@@ -25,9 +29,9 @@ export const APP_MODULES: readonly AppModule[] = [
   {
     code: 'crm', icon: 'handshake', label: 'modules.crm', tone: 'primary',
     nav: [
-      { path: '/m/crm', icon: 'dashboard', label: 'nav.overview' },
-      { path: '/m/crm/clientes', icon: 'contacts', label: 'nav.crm.clientes' },
+      { path: '/m/crm/contactos', icon: 'contacts', label: 'nav.crm.contactos' },
       { path: '/m/crm/oportunidades', icon: 'trending_up', label: 'nav.crm.oportunidades' },
+      { path: '/m/crm/configuracion', icon: 'tune', label: 'nav.crm.configuracion', rule: { minRole: 'L4' } },
     ],
   },
   {

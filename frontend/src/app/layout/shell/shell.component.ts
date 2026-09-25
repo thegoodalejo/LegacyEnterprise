@@ -74,8 +74,8 @@ export class ShellComponent {
 
   readonly nav = computed<ModuleNavItem[]>(() => {
     const m = this.activeModule();
-    if (m) return m.nav;
     this.session.user(); // recomputar al cambiar la sesión
+    if (m) return m.nav.filter(i => !i.rule || this.session.canAccess(i.rule));
     return HOME_NAV.filter(i =>
       (!i.rule || this.session.canAccess(i.rule)) && (!i.anyOf || i.anyOf.some(r => this.session.canAccess(r))));
   });
