@@ -42,16 +42,19 @@ export class ContactoPickerComponent {
   readonly results = signal<ContactoFila[]>([]);
   readonly noDisplay = (): string => '';
   private timer: ReturnType<typeof setTimeout> | null = null;
+  private seq = 0;
 
   /** El input con matAutocomplete emite también el objeto elegido: eso lo maneja pick(). */
   onQuery(q: string | ContactoFila): void {
     if (typeof q !== 'string') return;
     this.query.set(q);
+    const id = ++this.seq;
     if (this.timer) clearTimeout(this.timer);
     if (q.trim().length < 2) { this.results.set([]); return; }
     this.timer = setTimeout(async () => {
       // Sin buscar en relacionados: aquí se elige por el nombre/documento propio del contacto.
       const r = await this.crm.listContactos({ q: q.trim(), tipo: this.tipo(), estado: 'activos', relacionados: false }, 1, 8, 'nombre', 'asc');
+      if (id !== this.seq) return;   // una búsqueda más nueva ya está en camino: no pisar sus resultados
       if (r.action && r.data) {
         const fuera = new Set(this.excluir());
         this.results.set(r.data.contactos.filter(c => !fuera.has(c.id)));

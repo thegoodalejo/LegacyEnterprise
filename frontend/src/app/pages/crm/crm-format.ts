@@ -53,3 +53,21 @@ export function normalizeText(s: string): string {
 export function initials(name: string): string {
   return name.trim().split(/\s+/).slice(0, 2).map(p => p[0]?.toUpperCase() ?? '').join('');
 }
+
+/** "4.711000, -74.072100" (6 decimales, como se guarda). */
+export function formatCoords(lat: number, lng: number): string {
+  return `${lat.toFixed(6)}, ${lng.toFixed(6)}`;
+}
+
+/** Enlace para abrir el punto en Google Maps (no necesita API key). */
+export function mapsUrl(lat: number, lng: number): string {
+  return `https://www.google.com/maps/search/?api=1&query=${lat},${lng}`;
+}
+
+/** Lee "lat, lng" (como lo copia Google Maps: puntos decimales, separados por coma o espacio). null si no es válido. */
+export function parseCoords(text: string): { lat: number; lng: number } | null {
+  const n = text.match(/-?\d+(?:\.\d+)?/g);
+  if (!n || n.length !== 2) return null;
+  const lat = Number(n[0]), lng = Number(n[1]);
+  return lat >= -90 && lat <= 90 && lng >= -180 && lng <= 180 ? { lat, lng } : null;
+}

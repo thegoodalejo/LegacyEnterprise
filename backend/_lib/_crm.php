@@ -63,7 +63,7 @@ function crmCoord(mixed $v, float $min, float $max, string $label): ?float
 {
     if ($v === null || $v === '') return null;
     if (!is_numeric($v) || (float)$v < $min || (float)$v > $max) authFail(400, "$label fuera de rango");
-    return (float)$v;
+    return round((float)$v, 6);   // la BD guarda 6 decimales: así un guardado sin cambios no parece un cambio
 }
 
 function crmDigits(mixed $v): string
@@ -617,6 +617,8 @@ function crmParsearContacto(mysqli $conn, array $ctx, string $tipo, array $src, 
         'lng'       => crmCoord($src['lng'] ?? null, -180, 180, 'Longitud'),
         'id_responsable' => null,
     ];
+    // Ubicación del mapa: latitud y longitud van juntas (o ninguna).
+    if (($d['lat'] === null) !== ($d['lng'] === null)) authFail(400, 'La ubicación necesita latitud y longitud (o ninguna de las dos)');
     $resp = $src['id_responsable'] ?? null;
     if ($resp !== null && $resp !== '' && (int)$resp > 0) {
         $ok = crmRow($conn, 'SELECT 1 AS ok FROM le_usuario_sedes WHERE id_sede = ? AND id_usuario = ? AND state = 1 LIMIT 1',
@@ -705,11 +707,16 @@ function crmActualizarContacto(mysqli $conn, array $ctx, string $tipo, array $ac
     }
     $cambios = historialDiff($antes, $despues);
     if (!$cambios) return [];
-    // El historial muestra el nombre de la organización padre, no su id.
+    // El historial muestra el nombre de la organización padre (no su id) y la ubicación como un solo cambio (no dos).
     foreach ($cambios as &$c) {
         if ($c['campo'] === 'id_padre') { $c['campo'] = 'padre'; $c['antes'] = $actual['padre_nombre'] ?? null; $c['despues'] = $d['padre_nombre'] ?? null; }
     }
     unset($c);
+    if (array_filter($cambios, static fn($c) => in_array($c['campo'], ['lat', 'lng'], true))) {
+        $cambios = array_values(array_filter($cambios, static fn($c) => !in_array($c['campo'], ['lat', 'lng'], true)));
+        $fmt = static fn($la, $ln) => $la === null || $ln === null ? null : number_format((float)$la, 6, '.', '') . ', ' . number_format((float)$ln, 6, '.', '');
+        $cambios[] = ['campo' => 'ubicacion', 'antes' => $fmt($actual['lat'] ?? null, $actual['lng'] ?? null), 'despues' => $fmt($d['lat'], $d['lng'])];
+    }
 
     $id = $actual['id'];
     crmExec($conn,

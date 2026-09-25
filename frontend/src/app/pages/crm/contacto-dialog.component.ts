@@ -1,4 +1,4 @@
-import { ChangeDetectionStrategy, Component, computed, inject, signal } from '@angular/core';
+import { ChangeDetectionStrategy, ChangeDetectorRef, Component, computed, inject, signal } from '@angular/core';
 import { FormsModule } from '@angular/forms';
 import { MAT_DIALOG_DATA, MatDialog, MatDialogModule, MatDialogRef } from '@angular/material/dialog';
 import { MatButton, MatIconButton } from '@angular/material/button';
@@ -7,6 +7,7 @@ import { MatIcon } from '@angular/material/icon';
 import { MatInput } from '@angular/material/input';
 import { MatOption, MatSelect } from '@angular/material/select';
 import { ContactoPickerComponent } from '../../components/contacto-picker.component';
+import { GeoPickerDialogComponent, GeoPickerData, GeoPickerResult } from '../../components/geo-picker-dialog.component';
 import { DateInputComponent } from '../../components/date-input.component';
 import { TagChipComponent } from '../../components/tag-chip.component';
 import { TagPickerDialogComponent, TagPickerResult } from '../../components/tag-picker-dialog.component';
@@ -16,6 +17,7 @@ import {
 import { DialogService, dialogSize } from '../../services/dialog.service';
 import { LoadingService } from '../../services/loading.service';
 import { TranslatePipe, TranslationService } from '../../services/translation.service';
+import { formatCoords, mapsUrl } from './crm-format';
 
 export interface ContactoDialogData { id?: number; tipo?: TipoContacto }
 export interface ContactoDialogResult { id: number; advertencias: Advertencia[] }
@@ -133,6 +135,23 @@ const DOC_ORG = ['NIT', 'OTRO'];
               @for (u of responsables(); track u.id) { <mat-option [value]="u.id">{{ u.nombre }}</mat-option> }
             </mat-select>
           </mat-form-field>
+
+          <section class="block" id="location-block">
+            <h3>{{ 'crm.form.location' | translate }}</h3>
+            @if (lat() !== null && lng() !== null) {
+              <div class="ref-row">
+                <mat-icon>location_on</mat-icon>
+                <span class="ref-name" id="location-coords">{{ coordsLabel() }}</span>
+                <a mat-button [href]="urlMapa()" target="_blank" rel="noopener" id="location-open">{{ 'crm.form.open_in_maps' | translate }}</a>
+                <button mat-button type="button" id="btn-pick-location" (click)="pickLocation()">{{ 'crm.form.change_location' | translate }}</button>
+                <button mat-button type="button" id="btn-clear-location" (click)="clearLocation()">{{ 'crm.form.remove_location' | translate }}</button>
+              </div>
+            } @else {
+              <div>
+                <button mat-stroked-button type="button" id="btn-pick-location" (click)="pickLocation()"><mat-icon>add_location_alt</mat-icon>{{ 'crm.form.pick_on_map' | translate }}</button>
+              </div>
+            }
+          </section>
 
           @if (!esPersona()) {
             <section class="block" id="parent-block">
@@ -283,6 +302,7 @@ export class ContactoDialogComponent {
   private matDialog = inject(MatDialog);
   private loading = inject(LoadingService);
   private i18n = inject(TranslationService);
+  private cdr = inject(ChangeDetectorRef);
 
   readonly id = this.data.id ?? 0;
   readonly tipo = signal<TipoContacto>(this.data.tipo ?? 'persona');
@@ -310,6 +330,11 @@ export class ContactoDialogComponent {
   readonly refs = signal<RefItem[]>([]);
   private nextKey = 1;
   readonly roles = signal<RolVinculo[]>([]);
+  /** Ubicación en el mapa (opcional): latitud y longitud van juntas. */
+  readonly lat = signal<number | null>(null);
+  readonly lng = signal<number | null>(null);
+  readonly coordsLabel = computed(() => (this.lat() !== null && this.lng() !== null ? formatCoords(this.lat()!, this.lng()!) : ''));
+  readonly urlMapa = computed(() => mapsUrl(this.lat() ?? 0, this.lng() ?? 0));
   /** Organización a la que pertenece (jerarquía). */
   readonly padre = signal<{ id: number; nombre: string } | null>(null);
   readonly idsRefs = computed(() => this.refs().flatMap(r => r.id_persona ?? []));
@@ -350,6 +375,7 @@ export class ContactoDialogComponent {
     this.waInd = c.whatsapp_indicativo ?? (c.whatsapp_numero ? '' : '57'); this.waNum = c.whatsapp_numero ?? '';
     this.telefono = c.telefono ?? ''; this.direccion = c.direccion ?? ''; this.ciudad = c.ciudad ?? '';
     this.responsable = c.id_responsable; this.fechaNacSig.set(c.fecha_nacimiento);
+    this.lat.set(c.lat); this.lng.set(c.lng);
     this.tags.set(d.tags.map(t => ({ id: t.id, nombre: t.nombre, color: t.color })));
     this.refs.set(d.vinculos.map(v => ({ key: this.nextKey++, id_persona: v.id, nombre: v.nombre_completo, id_rol: v.id_rol, principal: v.principal })));
     this.padre.set(c.id_padre ? { id: c.id_padre, nombre: c.padre_nombre ?? '' } : null);
@@ -364,6 +390,25 @@ export class ContactoDialogComponent {
 
   setVal(id: number, v: string): void {
     this.vals.update(m => ({ ...m, [id]: v }));
+  }
+
+  // ─── Ubicación ─────────────────────────────────────────────────────────────────────────────────────────────────
+  pickLocation(): void {
+    const data: GeoPickerData = { lat: this.lat(), lng: this.lng(), direccion: this.direccion, ciudad: this.ciudad };
+    this.matDialog.open(GeoPickerDialogComponent, { ...dialogSize('720px'), data, autoFocus: 'first-tabbable' })
+      .afterClosed().subscribe((res: GeoPickerResult | undefined) => {
+        if (!res) return;
+        if ('clear' in res) { this.clearLocation(); return; }
+        // La dirección y la ciudad de Google solo rellenan lo que esté vacío: no pisan lo que la persona escribió.
+        if (!this.direccion.trim() && res.direccion) this.direccion = res.direccion;
+        if (!this.ciudad.trim() && res.ciudad) this.ciudad = res.ciudad;
+        this.lat.set(res.lat); this.lng.set(res.lng);
+        this.cdr.markForCheck();   // dirección/ciudad son campos de ngModel (no signals)
+      });
+  }
+
+  clearLocation(): void {
+    this.lat.set(null); this.lng.set(null);
   }
 
   // ─── Personas de referencia ────────────────────────────────────────────────────────────────────────────────────
@@ -429,6 +474,7 @@ export class ContactoDialogComponent {
       for (const c of this.campos()) campos[c.id] = this.vals()[c.id] ?? '';
       const payload: Record<string, unknown> = {
         id: this.id, tipo: this.tipo(), telefono: this.telefono.trim(), direccion: this.direccion.trim(), ciudad: this.ciudad.trim(),
+        lat: this.lat() ?? '', lng: this.lng() ?? '',
         id_responsable: this.responsable ?? '', campos, tag_ids: this.tags().map(t => t.id),
       };
       if (this.esPersona()) {

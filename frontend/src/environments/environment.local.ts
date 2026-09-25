@@ -16,5 +16,8 @@ export const environment = {
     messagingSenderId: '29644516990',
     appId: '1:29644516990:web:e6dfcf2d1bcf0e342c322f',
   },
+  // Key de navegador de Google Maps (pública por diseño, como la de Firebase): SIEMPRE con restricción por referrer y con solo
+  // «Maps JavaScript API» + «Geocoding API». Vacía = el selector de ubicación funciona solo con coordenadas escritas a mano.
+  googleMapsApiKey: '',
   vapidKey: 'BIMQjxRKPahxOUx00LzzIo8tMXc7YMDYVS3QuR0f7zAtNtB9mawrYk3t-9898_suEIJzmIL1FFkbG9EmMHmg70s',   // pública por diseño (Firebase → Cloud Messaging → Certificados push web)
 };

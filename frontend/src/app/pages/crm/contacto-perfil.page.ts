@@ -12,7 +12,7 @@ import { LoadingService } from '../../services/loading.service';
 import { SessionService } from '../../services/session.service';
 import { TranslatePipe, TranslationService } from '../../services/translation.service';
 import { ContactoDialogComponent, ContactoDialogResult } from './contacto-dialog.component';
-import { formatDateTime, initials, isoToDmy } from './crm-format';
+import { formatCoords, formatDateTime, initials, isoToDmy, mapsUrl } from './crm-format';
 import { HistorialDialogComponent } from './historial-dialog.component';
 
 /** Perfil de un Persona u Organización: datos, vínculos, etiquetas, campos personalizados, auditoría e historial. */
@@ -67,6 +67,12 @@ import { HistorialDialogComponent } from './historial-dialog.component';
               }
               @if (c.telefono) { <div><dt>{{ 'crm.form.telefono' | translate }}</dt><dd>{{ c.telefono }}</dd></div> }
               @if (c.direccion || c.ciudad) { <div><dt>{{ 'crm.form.direccion' | translate }}</dt><dd>{{ [c.direccion, c.ciudad].filter(x => x).join(', ') }}</dd></div> }
+              @if (c.lat !== null && c.lng !== null) {
+                <div id="profile-location">
+                  <dt>{{ 'crm.profile.location' | translate }}</dt>
+                  <dd>{{ coords(c.lat, c.lng) }} · <a class="inline-link" [href]="url(c.lat, c.lng)" target="_blank" rel="noopener">{{ 'crm.form.open_in_maps' | translate }}</a></dd>
+                </div>
+              }
               <div><dt>{{ 'crm.form.responsable' | translate }}</dt><dd>{{ c.responsable_nombre || '—' }}</dd></div>
             </dl>
           </section>
@@ -198,6 +204,8 @@ export default class ContactoPerfilPage {
   }
 
   fmt(iso: string): string { return isoToDmy(iso); }
+  coords(lat: number, lng: number): string { return formatCoords(lat, lng); }
+  url(lat: number, lng: number): string { return mapsUrl(lat, lng); }
   fmtDt(s: string): string { return formatDateTime(s); }
 
   valor(f: CampoConValor): string {
