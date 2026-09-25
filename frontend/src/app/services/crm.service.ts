@@ -173,10 +173,12 @@ export interface PaginaExportOportunidades {
   total: number; pagina: number; por_pagina: number; config: ConfigCrm;
 }
 
-// ─── Ventas importadas ────────────────────────────────────────────────────────────────────────────────────────────
+// ─── Ventas (importadas o registradas a mano) ─────────────────────────────────────────────────────────────────────
+export type OrigenVenta = 'manual' | 'importada';
+export type EstadoVentas = 'activas' | 'inactivas' | 'todas';
 export interface FiltrosVenta {
   desde?: string; hasta?: string; contacto?: number; dependientes?: boolean; q?: string; item?: number; categoria?: number; importacion?: number;
-  estado?: 'activas' | 'inactivas' | 'todas';
+  estado?: EstadoVentas; origen?: OrigenVenta;
 }
 export interface ResumenVentas { ventas: number; total: number; unidades: number; clientes: number; ticket_promedio: number; desde: string | null; hasta: string | null }
 export interface VentaFila {
@@ -194,6 +196,13 @@ export interface VentaDetalle {
   venta: { id: number; fecha: string; documento: string | null; total: number; unidades: number; activo: boolean; id_importacion: number | null; id_contacto: number;
     created_at: string; cliente: string; cliente_tipo: TipoContacto; archivo: string | null; creado_por: string | null };
   lineas: { id: number; id_item: number | null; codigo: string | null; nombre: string | null; unidad: string | null; categoria: string | null; cantidad: number; precio_unitario: number; total: number }[];
+  /** creado (manual), anulado ({motivo}), restaurado, reemplazado ({id_importacion}; `archivo` = el archivo de esa importación). */
+  historial: { id: number; accion: string; detalle: { motivo?: string; id_importacion?: number | null } | null; created_at: string; usuario: string | null; archivo: string | null }[];
+}
+/** Venta registrada a mano: líneas del catálogo (id_item) o libres (descripcion). */
+export interface VentaManual {
+  id_contacto: number; fecha: string; documento: string;
+  lineas: { id_item: number | null; descripcion: string; cantidad: number; precio_unitario: number }[];
 }
 export interface Importacion {
   id: number; archivo: string | null; estado: 'procesando' | 'completa' | 'revertida'; filas_total: number; filas_ok: number; filas_error: number;
@@ -375,7 +384,7 @@ export class CrmService {
   listNotas(idOportunidad: number): Promise<ApiResponse<{ notas: NotaOp[]; total: number }>> { return this.api.post('crm/list_notas.php', { id_oportunidad: idOportunidad }); }
   saveNota(data: Record<string, unknown>): Promise<ApiResponse<{ id: number }>> { return this.api.post('crm/save_nota.php', data); }
 
-  // ─── Ventas importadas ──────────────────────────────────────────────────────────────────────────────────────────
+  // ─── Ventas ─────────────────────────────────────────────────────────────────────────────────────────────────────
   listVentas(filtros: FiltrosVenta, pagina = 1, porPagina = 25, orden = 'fecha', dir: 'asc' | 'desc' = 'desc'): Promise<ApiResponse<ListaVentas>> {
     return this.api.post('crm/list_ventas.php', { vista: 'lista', filtros, pagina, por_pagina: porPagina, orden, dir });
   }
@@ -394,6 +403,12 @@ export class CrmService {
     return this.api.post('crm/list_importaciones.php', { pagina, por_pagina: porPagina });
   }
   revertirImportacion(id: number): Promise<ApiResponse<{ ventas_desactivadas: number }>> { return this.api.post('crm/revertir_importacion.php', { id_importacion: id }); }
+  /** Registra una venta manual; con `validar` solo la revisa en el servidor (no guarda nada). */
+  saveVenta(v: VentaManual, validar = false): Promise<ApiResponse<{ id: number; total: number; unidades: number; lineas: number }>> {
+    return this.api.post('crm/save_venta.php', { ...v, validar: validar ? 1 : 0 });
+  }
+  anularVenta(id: number, motivo: string): Promise<ApiResponse<{ id: number; activo: boolean }>> { return this.api.post('crm/anular_venta.php', { id, accion: 'anular', motivo }); }
+  restaurarVenta(id: number): Promise<ApiResponse<{ id: number; activo: boolean }>> { return this.api.post('crm/anular_venta.php', { id, accion: 'restaurar' }); }
   listImportPlantillas(): Promise<ApiResponse<{ plantillas: PlantillaImport[] }>> { return this.api.post('crm/list_import_plantillas.php'); }
   saveImportPlantilla(nombre: string, mapeo: unknown, activo = true): Promise<ApiResponse<{ nombre: string }>> {
     return this.api.post('crm/save_import_plantilla.php', { nombre, mapeo: activo ? mapeo : undefined, activo: activo ? 1 : 0 });

@@ -19,6 +19,7 @@ import { abrirMetaDialog } from './meta-dialog.component';
 import { MetaBarComponent, MetaEstadoComponent, periodoDe, valorMetrica } from './metas-ui';
 import { abrirOportunidadDialog } from './oportunidad-dialog.component';
 import { VentaDialogComponent } from './venta-dialog.component';
+import { abrirVentaManualDialog } from './venta-manual-dialog.component';
 import { rangoPeriodo } from './ventas.page';
 
 /** Perfil de un Persona u Organización: datos, vínculos, etiquetas, campos personalizados, auditoría e historial. */
@@ -141,7 +142,10 @@ import { rangoPeriodo } from './ventas.page';
 
           @if (ventasRes(); as vr) {
             <section class="card" id="profile-sales">
-              <h2>{{ 'crm.sales.profile_title' | translate }}</h2>
+              <div class="card-head">
+                <h2>{{ 'crm.sales.profile_title' | translate }}</h2>
+                @if (canAudit() && c.activo) { <button mat-button id="btn-profile-sale" (click)="nuevaVenta()"><mat-icon>add_shopping_cart</mat-icon>{{ 'crm.cart.register' | translate }}</button> }
+              </div>
               @if (vr.ventas) {
                 <dl class="sales-k">
                   <div><dt>{{ 'crm.sales.k_total' | translate }}</dt><dd><strong>{{ cfg.money(vr.total) }}</strong></dd></div>
@@ -321,7 +325,27 @@ export default class ContactoPerfilPage {
     if (c) abrirMetaDialog(this.matDialog, { meta: m }).afterClosed().subscribe(ok => { if (ok) void this.loadMetas(c.id); });
   }
 
-  verVenta(v: VentaFila): void { this.matDialog.open(VentaDialogComponent, { ...dialogSize('720px'), data: v.id }); }
+  verVenta(v: VentaFila): void {
+    this.matDialog.open(VentaDialogComponent, { ...dialogSize('720px'), data: v.id }).afterClosed().subscribe(cambio => { if (cambio) this.recargarVentas(); });
+  }
+
+  /** Carrito de venta manual con este contacto como cliente; al registrarla se recargan la tarjeta de ventas y las metas (el avance cambia al instante). */
+  nuevaVenta(): void {
+    const c = this.d()?.contacto;
+    if (!c) return;
+    abrirVentaManualDialog(this.matDialog, { contacto: { id: c.id, nombre: c.nombre_completo, tipo: c.tipo } }).afterClosed().subscribe(async r => {
+      if (!r) return;
+      this.recargarVentas();
+      await this.dialogs.success({ title: this.i18n.t('crm.cart.saved'), message: this.i18n.t('crm.cart.saved_msg', { total: this.cfg.money(r.total), client: r.cliente }) });
+    });
+  }
+
+  private recargarVentas(): void {
+    const det = this.d();
+    if (!det) return;
+    void this.loadVentas(det.contacto.id, det.hijas.length > 0);
+    if (det.contacto.tipo === 'organizacion') void this.loadMetas(det.contacto.id);
+  }
 
   newOpp(): void {
     const c = this.d()?.contacto;

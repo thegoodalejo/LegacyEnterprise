@@ -18,7 +18,7 @@ import { CrmConfigService } from '../../services/crm-config.service';
 import { ejecutarExportacion } from '../../services/crm-report.service';
 import { CrmVentasReportService } from '../../services/crm-ventas-report.service';
 import {
-  CategoriaItem, CrmService, FiltrosVenta, GrupoCliente, GrupoItem, GrupoMes, Importacion, ResumenVentas, VentaFila,
+  CategoriaItem, CrmService, EstadoVentas, FiltrosVenta, GrupoCliente, GrupoItem, GrupoMes, Importacion, OrigenVenta, ResumenVentas, VentaFila,
 } from '../../services/crm.service';
 import { DialogService, dialogSize } from '../../services/dialog.service';
 import { LoadingService } from '../../services/loading.service';
@@ -27,6 +27,7 @@ import { TranslatePipe, TranslationService } from '../../services/translation.se
 import { formatDate, formatDateTime } from './crm-format';
 import { TranslatedPaginatorIntl } from './translated-paginator-intl';
 import { VentaDialogComponent } from './venta-dialog.component';
+import { abrirVentaManualDialog } from './venta-manual-dialog.component';
 import { VentasImportDialogComponent } from './ventas-import-dialog.component';
 
 type Periodo = 'mes' | 'mes_ant' | 'trimestre' | 'anio' | '12m' | 'todo' | 'rango';
@@ -47,7 +48,10 @@ export function rangoPeriodo(p: Periodo, hoy = new Date()): { desde: string | nu
   }
 }
 
-/** Ventas importadas: indicadores, análisis por cliente, ítem y mes, detalle, importaciones (con reversión) y exportación. */
+/**
+ * Ventas (importadas o registradas a mano): indicadores, análisis por cliente, ítem y mes, detalle, importaciones (con reversión), «Nueva venta»
+ * (carrito) y exportación.
+ */
 @Component({
   selector: 'app-ventas-page',
   changeDetection: ChangeDetectionStrategy.OnPush,
@@ -62,7 +66,10 @@ export function rangoPeriodo(p: Periodo, hoy = new Date()): { desde: string | nu
         <h1>{{ 'crm.sales.title' | translate }}</h1>
         <div class="actions">
           <app-export-menu [alcances]="exportAlcances()" [disabled]="!resumen()?.ventas" (exportar)="exportar($event)" />
-          @if (puedeImportar()) { <button mat-flat-button id="btn-import" (click)="importar()"><mat-icon>upload</mat-icon>{{ 'crm.sales.import' | translate }}</button> }
+          @if (puedeImportar()) {
+            <button mat-stroked-button id="btn-import" (click)="importar()"><mat-icon>upload</mat-icon>{{ 'crm.sales.import' | translate }}</button>
+            <button mat-flat-button id="btn-new-sale" (click)="nuevaVenta()"><mat-icon>add_shopping_cart</mat-icon>{{ 'crm.sales.new' | translate }}</button>
+          }
         </div>
       </header>
 
@@ -89,6 +96,20 @@ export function rangoPeriodo(p: Periodo, hoy = new Date()): { desde: string | nu
             <mat-select id="filter-categoria" [ngModel]="categoria()" (ngModelChange)="categoria.set($event)">
               <mat-option [value]="null">{{ 'crm.filters.all' | translate }}</mat-option>
               @for (c of categorias(); track c.id) { <mat-option [value]="c.id">{{ c.nombre }}</mat-option> }
+            </mat-select>
+          </mat-form-field>
+          <mat-form-field appearance="outline" subscriptSizing="dynamic" class="narrow">
+            <mat-label>{{ 'crm.sales.origin_filter' | translate }}</mat-label>
+            <mat-select id="filter-origen" [ngModel]="origen()" (ngModelChange)="origen.set($event)">
+              <mat-option [value]="null">{{ 'crm.sales.o_all' | translate }}</mat-option>
+              <mat-option value="manual">{{ 'crm.sales.o_manual' | translate }}</mat-option>
+              <mat-option value="importada">{{ 'crm.sales.o_importada' | translate }}</mat-option>
+            </mat-select>
+          </mat-form-field>
+          <mat-form-field appearance="outline" subscriptSizing="dynamic" class="narrow">
+            <mat-label>{{ 'crm.col.status' | translate }}</mat-label>
+            <mat-select id="filter-estado" [ngModel]="estado()" (ngModelChange)="estado.set($event)">
+              @for (e of estados; track e) { <mat-option [value]="e">{{ 'crm.sales.e_' + e | translate }}</mat-option> }
             </mat-select>
           </mat-form-field>
         </div>
@@ -178,7 +199,9 @@ export function rangoPeriodo(p: Periodo, hoy = new Date()): { desde: string | nu
               <thead><tr><th>{{ 'crm.sales.date' | translate }}</th><th>{{ 'crm.sales.document' | translate }}</th><th>{{ 'crm.opp.client' | translate }}</th><th class="n hide-md">{{ 'crm.opp.lines' | translate }}</th><th class="n">{{ 'crm.sales.total' | translate }}</th></tr></thead>
               <tbody>
                 @for (v of ventas(); track v.id) {
-                  <tr class="row" (click)="verVenta(v)"><td>{{ fmt(v.fecha) }}</td><td>{{ v.documento || '—' }}</td><td>{{ v.cliente }}</td><td class="n hide-md">{{ v.lineas }}</td><td class="n">{{ cfg.money(v.total) }}</td></tr>
+                  <tr class="row" [class.off]="!v.activo" (click)="verVenta(v)"><td>{{ fmt(v.fecha) }}</td>
+                    <td>{{ v.documento || '—' }}@if (v.id_importacion === null) { <span class="tag" [attr.id]="'manual-' + v.id">{{ 'crm.sales.manual' | translate }}</span> }@if (!v.activo) { <span class="tag off-tag">{{ (v.id_importacion === null ? 'crm.sales.annulled' : 'crm.sales.st_revertida') | translate }}</span> }</td>
+                    <td>{{ v.cliente }}</td><td class="n hide-md">{{ v.lineas }}</td><td class="n">{{ cfg.money(v.total) }}</td></tr>
                 } @empty { <tr><td colspan="5" class="muted">{{ 'crm.sales.empty' | translate }}</td></tr> }
               </tbody>
             </table>
@@ -227,7 +250,9 @@ export function rangoPeriodo(p: Periodo, hoy = new Date()): { desde: string | nu
     .kpi { display: flex; flex-direction: column; gap: 2px; padding: 12px 16px; border-radius: 16px; background: var(--md-sys-color-surface-container-low); border: 1px solid var(--md-sys-color-outline-variant);
       span { font: var(--mat-sys-label-medium); color: var(--md-sys-color-on-surface-variant); } strong { font: var(--mat-sys-title-large); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; } }
     .t { width: 100%; border-collapse: collapse; margin-top: 8px; th, td { padding: 8px; border-bottom: 1px solid var(--md-sys-color-outline-variant); text-align: left; } th { font: var(--mat-sys-label-large); color: var(--md-sys-color-on-surface-variant); } .n { text-align: right; white-space: nowrap; } }
-    tr.row { cursor: pointer; } tr.row:hover { background: var(--md-sys-color-surface-container-low); }
+    tr.row { cursor: pointer; } tr.row:hover { background: var(--md-sys-color-surface-container-low); } tr.off td { color: var(--md-sys-color-on-surface-variant); }
+    .tag { display: inline-block; margin-left: 6px; padding: 0 8px; border-radius: 999px; font: var(--mat-sys-label-small); background: var(--md-sys-color-tertiary-container); color: var(--md-sys-color-on-tertiary-container);
+      &.off-tag { background: var(--md-sys-color-surface-container-highest); color: var(--md-sys-color-on-surface-variant); } }
     .bar { width: 22%; span { display: block; height: 8px; border-radius: 4px; background: var(--md-sys-color-primary); min-width: 2px; } }
     .months { display: flex; flex-direction: column; gap: 6px; padding: 12px 0; }
     .month { display: grid; grid-template-columns: 110px 1fr auto; gap: 4px 12px; align-items: center; .mb { height: 14px; background: var(--md-sys-color-surface-container-high); border-radius: 7px; overflow: hidden; span { display: block; height: 100%; background: var(--md-sys-color-primary); } } .mv { font: var(--mat-sys-label-large); text-align: right; } .mc { grid-column: 2 / 4; } }
@@ -254,6 +279,7 @@ export default class VentasPage {
   private reportes = inject(CrmVentasReportService);
 
   readonly periodos: Periodo[] = ['mes', 'mes_ant', 'trimestre', 'anio', '12m', 'todo', 'rango'];
+  readonly estados: EstadoVentas[] = ['activas', 'inactivas', 'todas'];
   readonly periodo = signal<Periodo>('anio');
   readonly desde = signal<string | null>(rangoPeriodo('anio').desde);
   readonly hasta = signal<string | null>(rangoPeriodo('anio').hasta);
@@ -265,6 +291,8 @@ export default class VentasPage {
   readonly dependientes = signal(true);
   readonly item = signal<{ id: number; nombre: string } | null>(null);
   readonly importacion = signal<{ id: number; archivo: string | null } | null>(null);
+  readonly origen = signal<OrigenVenta | null>(null);
+  readonly estado = signal<EstadoVentas>('activas');
   readonly categorias = signal<CategoriaItem[]>([]);
   readonly puedeImportar = computed(() => this.session.hasMinRole('L2'));
 
@@ -295,6 +323,8 @@ export default class VentasPage {
     if (this.cliente()) { f.contacto = this.cliente()!.id; if (this.dependientes()) f.dependientes = true; }
     if (this.item()) f.item = this.item()!.id;
     if (this.importacion()) f.importacion = this.importacion()!.id;
+    if (this.origen()) f.origen = this.origen()!;
+    if (this.estado() !== 'activas') f.estado = this.estado();
     return f;
   });
   readonly exportAlcances = computed<ExportAlcance[]>(() => [
@@ -358,7 +388,9 @@ export default class VentasPage {
 
   verCliente(g: GrupoCliente): void { void this.router.navigate(['/m/crm/contactos', g.id]); }
   verItem(g: GrupoItem): void { if (g.id_item) { this.item.set({ id: g.id_item, nombre: g.nombre ?? '' }); this.tab.set('ventas'); } }
-  verVenta(v: VentaFila): void { this.matDialog.open(VentaDialogComponent, { ...dialogSize('720px'), data: v.id }); }
+  verVenta(v: VentaFila): void {
+    this.matDialog.open(VentaDialogComponent, { ...dialogSize('720px'), data: v.id }).afterClosed().subscribe(cambio => { if (cambio) void this.load(); });
+  }
   verLote(i: Importacion): void { this.importacion.set({ id: i.id, archivo: i.archivo }); this.setPeriodo('todo'); this.tab.set('ventas'); }
 
   async verErrores(i: Importacion): Promise<void> {
@@ -370,6 +402,16 @@ export default class VentasPage {
   importar(): void {
     this.matDialog.open(VentasImportDialogComponent, { ...dialogSize('960px'), autoFocus: 'first-tabbable', disableClose: false })
       .afterClosed().subscribe(ok => { if (ok) { this.tab.set('importaciones'); void this.load(); } });
+  }
+
+  /** Carrito de venta manual; al registrarla se ve en la pestaña Ventas. */
+  nuevaVenta(): void {
+    abrirVentaManualDialog(this.matDialog).afterClosed().subscribe(async r => {
+      if (!r) return;
+      if (this.tab() === 'ventas') void this.load();
+      else this.tab.set('ventas');   // el cambio de pestaña ya recarga
+      await this.dialogs.success({ title: this.i18n.t('crm.cart.saved'), message: this.i18n.t('crm.cart.saved_msg', { total: this.cfg.money(r.total), client: r.cliente }) });
+    });
   }
 
   async revertir(i: Importacion): Promise<void> {
@@ -398,6 +440,8 @@ export default class VentasPage {
       if (this.categoria()) texto.push(`${t('crm.catalog.item_category')}: ${this.categorias().find(c => c.id === this.categoria())?.nombre ?? ''}`);
       if (this.q()) texto.push(`${t('crm.filters.search')}: «${this.q()}»`);
       if (this.importacion()) texto.push(`${t('crm.sales.batch')}: ${this.importacion()!.archivo ?? this.importacion()!.id}`);
+      if (this.origen()) texto.push(`${t('crm.sales.origin_filter')}: ${t('crm.sales.o_' + this.origen())}`);
+      if (this.estado() !== 'activas') texto.push(`${t('crm.col.status')}: ${t('crm.sales.e_' + this.estado())}`);
     }
     await ejecutarExportacion(this, () => this.reportes.exportarVentas({ filtros, totalEsperado: todos ? undefined : this.resumen()?.ventas, formato: e.formato, filtrosTexto: texto }));
   }

@@ -6,6 +6,7 @@
 //   - un solo procesador de bloques (crmVentasProcesar) sirve a la simulación y a la importación real.
 
 require_once __DIR__ . '/_crm.php';
+require_once __DIR__ . '/_crm_oportunidades.php';   // crmOpLineasParsear: las líneas de una venta manual siguen las mismas reglas
 
 const CRM_VENTAS_BLOQUE_MAX = 500;      // ventas por bloque
 const CRM_VENTAS_LINEAS_MAX = 3000;     // líneas por bloque
@@ -17,7 +18,8 @@ const CRM_IDENTIFICAR = ['documento', 'nombre', 'campo'];
 /**
  * Condición WHERE (alias v = crm_ventas, c = crm_contactos del cliente) para listar, resumir y exportar ventas.
  * Claves: desde, hasta (fechas de venta), contacto (id del cliente), dependientes (bool: incluye las organizaciones que pertenecen al cliente),
- * q (documento o cliente, por palabras), item (id), categoria (id), importacion (id), estado (activas|inactivas|todas; por defecto activas).
+ * q (documento o cliente, por palabras), item (id), categoria (id), importacion (id), estado (activas|inactivas|todas; por defecto activas),
+ * origen (manual = registradas a mano | importada; sin valor = las dos).
  */
 function crmVentaFiltros(mysqli $conn, array $ctx, array $f): array
 {
@@ -26,6 +28,10 @@ function crmVentaFiltros(mysqli $conn, array $ctx, array $f): array
     if ($estado === 'activas') $w[] = 'v.activo = 1';
     elseif ($estado === 'inactivas') $w[] = 'v.activo = 0';
     elseif ($estado !== 'todas') authFail(400, 'Filtro de estado inválido');
+    $origen = (string)($f['origen'] ?? '');
+    if ($origen === 'manual') $w[] = 'v.id_importacion IS NULL';
+    elseif ($origen === 'importada') $w[] = 'v.id_importacion IS NOT NULL';
+    elseif ($origen !== '') authFail(400, 'Filtro de origen inválido');
 
     $desde = crmFecha($f['desde'] ?? null, 'Desde');
     if ($desde !== null) { $w[] = 'v.fecha >= ?'; $t .= 's'; $p[] = $desde; }
@@ -272,6 +278,8 @@ function crmVentasProcesar(mysqli $conn, array $ctx, array $ventas, array $op, ?
         if ($dup) {
             crmExec($conn, 'UPDATE crm_ventas SET activo = 0, updated_by = ? WHERE id_sede = ? AND id IN (' . crmMarks(count($dup)) . ')',
                 'ii' . str_repeat('i', count($dup)), [$ctx['id_usuario'], $ctx['id_sede'], ...$dup]);
+            // En el historial de la venta reemplazada (una manual también puede serlo); en la simulación se revierte con la transacción.
+            auditRegistroVarios($conn, $ctx['id_sede'], 'crm', 'crm_ventas', $dup, 'reemplazado', ['id_importacion' => $idImportacion]);
             $res['ventas_reemplazadas']++;
             unset($existentes[crmVentaClaveTexto($v['documento'])]);
         } else {
@@ -321,4 +329,86 @@ function crmImportacion(mysqli $conn, array $ctx, int $id): ?array
 {
     $r = crmRow($conn, 'SELECT * FROM crm_importaciones WHERE id = ? AND id_sede = ? LIMIT 1', 'ii', [$id, $ctx['id_sede']]);
     return $r ?: null;
+}
+
+// ─── Venta manual (carrito) ──────────────────────────────────────────────────────────────────────────────────────────
+
+/** Venta ACTIVA de la sede con ese número de documento (sin distinguir mayúsculas, como la importación), sin contar `$exceptoId`; o null. */
+function crmVentaDocumentoOcupado(mysqli $conn, array $ctx, string $documento, int $exceptoId = 0): ?array
+{
+    return crmRow($conn,
+        'SELECT v.id, v.fecha, v.documento, c.nombre_completo AS cliente FROM crm_ventas v JOIN crm_contactos c ON c.id = v.id_contacto
+          WHERE v.id_sede = ? AND v.activo = 1 AND v.documento = ? AND v.id <> ? LIMIT 1', 'isi', [$ctx['id_sede'], $documento, $exceptoId]);
+}
+
+/** 409 si el número de documento ya lo tiene otra venta activa de la sede. */
+function crmVentaExigirDocumentoLibre(mysqli $conn, array $ctx, ?string $documento, int $exceptoId = 0): void
+{
+    if ($documento === null) return;
+    $otra = crmVentaDocumentoOcupado($conn, $ctx, $documento, $exceptoId);
+    if ($otra) authFail(409, 'Ya hay una venta activa con el documento «' . $otra['documento'] . '» (' . $otra['cliente'] . ', ' . date('d-m-Y', strtotime($otra['fecha'])) . ')');
+}
+
+/**
+ * Valida una venta escrita a mano: cliente (Organización o Persona ACTIVA de la sede), fecha (desde 1990 y como mucho mañana, igual que la
+ * importación: el navegador puede ir un día adelante del servidor), documento opcional y libre entre las ventas activas, y líneas
+ * [{id_item | descripcion, cantidad, precio_unitario}] con las mismas reglas que las de una oportunidad (ítem activo del catálogo o descripción libre,
+ * cantidad > 0, precio ≥ 0, total = cantidad × precio). A las líneas del catálogo les deja el código y el nombre del ítem en ese momento.
+ * Devuelve {id_contacto, cliente, fecha, documento, lineas, total, unidades}.
+ */
+function crmVentaManualParsear(mysqli $conn, array $ctx, array $src, ?array $lineasSrc): array
+{
+    $idContacto = (int)($src['id_contacto'] ?? 0);
+    $c = $idContacto > 0 ? crmRow($conn, 'SELECT id, nombre_completo, activo FROM crm_contactos WHERE id = ? AND id_sede = ? LIMIT 1', 'ii', [$idContacto, $ctx['id_sede']]) : null;
+    if (!$c) authFail(400, 'Elige el cliente de la venta');
+    if ((int)$c['activo'] !== 1) authFail(400, 'El cliente elegido está archivado');
+
+    $fecha = crmFecha($src['fecha'] ?? null, 'Fecha');
+    if ($fecha === null) authFail(400, 'La fecha de la venta es obligatoria');
+    if ($fecha < '1990-01-01' || $fecha > date('Y-m-d', strtotime('+1 day'))) authFail(400, 'La fecha de la venta no puede ser futura');
+
+    $documento = crmClean($src['documento'] ?? null, 60, 'Número de documento');
+    crmVentaExigirDocumentoLibre($conn, $ctx, $documento);
+
+    if (!$lineasSrc) authFail(400, 'Agrega al menos un ítem a la venta');
+    $pl = crmOpLineasParsear($conn, $ctx, $lineasSrc);
+    $ids = array_values(array_unique(array_filter(array_column($pl['lineas'], 'id_item'))));
+    $items = [];
+    if ($ids) {
+        foreach (crmRows($conn, 'SELECT id, codigo, nombre FROM crm_catalogo_items WHERE id_empresa = ? AND id IN (' . crmMarks(count($ids)) . ')',
+            'i' . str_repeat('i', count($ids)), [$ctx['id_empresa'], ...$ids]) as $r) $items[(int)$r['id']] = $r;
+    }
+    $lineas = array_map(static function (array $l) use ($items): array {
+        $it = $l['id_item'] !== null ? ($items[$l['id_item']] ?? null) : null;
+        return [
+            'id_item' => $l['id_item'], 'codigo' => $it ? (mb_substr((string)$it['codigo'], 0, 40) ?: null) : null,
+            'descripcion' => $it ? mb_substr($it['nombre'], 0, 255) : $l['descripcion'],
+            'cantidad' => $l['cantidad'], 'precio' => $l['precio_unitario'], 'total' => $l['total'],
+        ];
+    }, $pl['lineas']);
+
+    return [
+        'id_contacto' => $idContacto, 'cliente' => $c['nombre_completo'], 'fecha' => $fecha, 'documento' => $documento, 'lineas' => $lineas,
+        'total' => $pl['suma'], 'unidades' => round(array_sum(array_column($lineas, 'cantidad')), 4),
+    ];
+}
+
+/** Inserta la venta manual ya validada (id_importacion NULL) con sus líneas y deja el historial. Devuelve el id. */
+function crmVentaManualGuardar(mysqli $conn, array $ctx, array $v): int
+{
+    crmExec($conn, 'INSERT INTO crm_ventas (id_sede, id_contacto, fecha, documento, total, unidades, id_importacion, created_by, updated_by) VALUES (?, ?, ?, ?, ?, ?, NULL, ?, ?)',
+        'iissddii', [$ctx['id_sede'], $v['id_contacto'], $v['fecha'], $v['documento'], $v['total'], $v['unidades'], $ctx['id_usuario'], $ctx['id_usuario']]);
+    $id = (int)$conn->insert_id;
+    $vals = []; $params = [];
+    foreach ($v['lineas'] as $l) {
+        $vals[] = '(?, ?, ?, ?, ?, ?, ?, ?, ?)';
+        array_push($params, $id, $l['id_item'], $l['codigo'], $l['descripcion'], $l['cantidad'], $l['precio'], $l['total'], $ctx['id_usuario'], $ctx['id_usuario']);
+    }
+    crmExec($conn, 'INSERT INTO crm_venta_lineas (id_venta, id_item, codigo, descripcion, cantidad, precio_unitario, total, created_by, updated_by) VALUES ' . implode(',', $vals),
+        str_repeat('iissdddii', count($v['lineas'])), $params);
+    auditRegistro($conn, $ctx['id_sede'], 'crm', 'crm_ventas', $id, 'creado', [
+        'origen' => 'manual', 'cliente' => ['id' => $v['id_contacto'], 'nombre' => $v['cliente']], 'fecha' => $v['fecha'], 'documento' => $v['documento'],
+        'lineas' => count($v['lineas']), 'total' => $v['total'],
+    ]);
+    return $id;
 }
