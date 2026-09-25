@@ -4,7 +4,8 @@
 > campos personalizados, etiquetas, historial, filtros, búsqueda en relacionados, acciones en lote, vocabulario por empresa
 > y plantillas por nicho, más **reportes PDF/Excel con la marca del cliente** y **oportunidades** (embudo configurable, tablero y lista,
 > catálogo de ítems, líneas, notas, cierre con motivo), **ventas** importadas desde Excel/CSV (lotes revertibles, análisis por cliente, ítem y mes)
-> o **registradas a mano con un carrito** (revisión antes de confirmar, anulación con motivo) y **metas paramétricas** (empresa → sede → organización, con avance, ritmo esperado, generación en lote e informe).
+> o **registradas a mano con un carrito** (revisión antes de confirmar, anulación con motivo; también desde una **oportunidad ganada**, con todo cargado)
+> y **metas paramétricas** (empresa → sede → organización, con avance, ritmo esperado, generación en lote e informe).
 > Actualizado: 2026-09-25. Actividades y cotizaciones: por definir.
 
 ## Objetivo
@@ -77,7 +78,7 @@ una tabla base con un solo espacio de ids y una extensión 1–1 por tipo.
 | `crm_oportunidades` | Por **sede**: título, contacto (Persona u Organización), persona de contacto, responsable, embudo/etapa, valor, cierre estimado y real, estado, motivo, descripción, `etapa_desde`, `activo` |
 | `crm_oportunidad_lineas`, `crm_oportunidad_notas` | Líneas (ítem o descripción libre × cantidad × precio) y bitácora de notas (borrado lógico) |
 | `crm_oportunidad_valores`, `crm_oportunidad_tags` | Campos personalizados y etiquetas de las oportunidades (espejo de las de contactos: aquellas tienen FK a `crm_contactos`) |
-| `crm_importaciones`, `crm_ventas`, `crm_venta_lineas`, `crm_import_plantillas` | Ventas importadas por lotes o registradas a mano (migración `006`, ver *Ventas*) |
+| `crm_importaciones`, `crm_ventas`, `crm_venta_lineas`, `crm_import_plantillas` | Ventas importadas por lotes o registradas a mano (migración `006`; `crm_ventas.id_oportunidad` en la `008`; ver *Ventas*) |
 | `crm_metricas`, `crm_metas` | Qué se mide y cuánto se espera de la empresa, la sede o una organización en un período (migración `007`, ver *Metas*) |
 
 **Ámbitos.** Los contactos son de una **sede** (`id_sede` siempre sale de la sesión). La configuración (campos,
@@ -127,7 +128,8 @@ el usuario, la fecha y el detalle `[{campo, antes, después}]`. Las acciones en 
 conserva todo**; el perfil muestra por defecto los **últimos 3 meses** y «Ver anteriores» muestra el resto. Botón
 pequeño de historial (ícono `history`) en la cabecera del perfil. La tabla es genérica: Agenda, Pedidos, etc. la
 reutilizarán con `auditRegistro()`. Las ventas también la usan (`tabla = crm_ventas`: registrada a mano, anulada, restaurada, reemplazada por una
-importación) y la muestran en el detalle de cada venta (ver *Ventas → Venta manual*).
+importación) y la muestran en el detalle de cada venta (ver *Ventas → Venta manual*). Una oportunidad anota también lo de su venta (`venta_registrada`,
+`venta_anulada`, `venta_restaurada`, `venta_reemplazada`).
 
 ## Filtros y búsqueda
 
@@ -190,6 +192,8 @@ abierta limpia cierre y motivo. `etapa_desde` guarda cuándo entró a la etapa a
 - **Filtros:** texto (título, cliente o persona de contacto), estado, embudo, responsable, cliente, cierre estimado desde/hasta, valor mínimo/máximo, etiquetas,
   campos personalizados de oportunidad y archivadas.
 - **Ficha** `/m/crm/oportunidades/:id`: datos, líneas, notas (edita/elimina su autor o L2+), etiquetas, campos, historial (L2+) y «Mover a…».
+- **Venta de una ganada:** la tarjeta del tablero, la fila de la lista, su menú y la ficha llevan el botón de carrito «Registrar venta» (L2+) o, si ya
+  tiene su venta, «Ver venta» (cualquiera). Abre el carrito con todo cargado; ver *Ventas → Venta desde una oportunidad ganada*.
   El perfil del contacto muestra sus oportunidades y permite crear una con el contacto ya elegido (si es una Organización, se propone su persona principal).
 - **Varios embudos:** el modelo los admite; el selector aparece solo cuando hay más de uno. Reglas: no se desactiva un embudo con oportunidades activas
   ni el último activo; cada embudo conserva al menos una etapa abierta activa; el tipo de una etapa no cambia si ya tiene oportunidades (se crea otra);
@@ -215,7 +219,7 @@ Ventas/Facturación escriba en las mismas. `id_importacion` NULL = venta que no 
 | Tabla | Contenido |
 |---|---|
 | `crm_importaciones` | Un **lote** por archivo cargado (por **sede**): archivo, estado (`procesando` → `completa` o `revertida`), opciones y mapeo con que se leyó, contadores (filas totales/ok/error, ventas nuevas/reemplazadas/omitidas, ítems creados), valor total, rango de fechas, las primeras 200 filas con error `[{fila, motivo}]`, quién y cuándo lo revirtió |
-| `crm_ventas` | Una venta = un documento de un **Contacto** de la sede (Organización o Persona) en una fecha: número de documento (opcional), total (= suma de líneas), unidades (= suma de cantidades), lote (**NULL = registrada a mano**), `activo` (0 = revertida, reemplazada o anulada) |
+| `crm_ventas` | Una venta = un documento de un **Contacto** de la sede (Organización o Persona) en una fecha: número de documento (opcional), total (= suma de líneas), unidades (= suma de cantidades), lote (**NULL = registrada a mano**), `id_oportunidad` (la oportunidad ganada de la que se registró; migración `008`), `activo` (0 = revertida, reemplazada o anulada) |
 | `crm_venta_lineas` | Ítem del catálogo si el código se reconoce; si no, el código y la descripción tal como vinieron (en la venta manual: el código y el nombre del ítem en ese momento, o la descripción de la línea libre); cantidad, precio unitario, total |
 | `crm_import_plantillas` | Por **empresa**: cómo leer el archivo de cada mes (columnas, fila de encabezado, formato de fecha, separador decimal y opciones), con nombre |
 
@@ -308,6 +312,36 @@ importada activa. Así, cargar después el archivo del ERP con la misma factura 
 por línea (se escribe el precio neto); no calcula impuestos ni numera facturas. Es un registro comercial para indicadores y metas, no un documento
 fiscal (eso sería el futuro módulo de Facturación).
 
+### Venta desde una oportunidad ganada (migración `008_crm_venta_oportunidad.sql`; L2+)
+
+Cuando se gana una oportunidad, su venta se registra **a mano** (nunca sola) reusando el mismo carrito con todo cargado: solo falta el número de factura.
+
+- **Dónde:** botón de carrito «Registrar venta» en la **tarjeta** del tablero (columna ganada), en la **fila** de la lista, en el menú «⋮» de ambas y en la
+  tarjeta **Venta** de la ficha. Solo en oportunidades **ganadas y activas** y para **L2+** (como toda venta manual). Si ya tiene su venta, el botón
+  pasa a «Ver venta» (lo ve cualquiera con acceso al CRM, y también si la oportunidad se reabrió después). L1 ve en la ficha «Sin venta registrada».
+- **Qué carga:** el **cliente** de la oportunidad, **fijo** (sin botón para cambiarlo: la factura es para quien se le ganó); las **líneas** tal cual
+  (ítems con código, cantidad y precio; libres con su descripción); si la oportunidad no tiene líneas, **una línea libre** con el título y el valor;
+  la **fecha de hoy** (editable); un aviso «{Oportunidad}: «título». Revisa las líneas y escribe el número de factura.» y el **cursor en el número de
+  factura**. Todo se puede cambiar antes de confirmar (lo facturado puede diferir de lo cotizado); el resumen muestra también la oportunidad.
+  Cerrar sin haber cambiado nada no pide confirmación.
+- **Reglas del servidor** (`save_venta.php` con `id_oportunidad`): la oportunidad es de la sede, está **activa** y **ganada** (409 si no); el cliente
+  enviado es el de la oportunidad (400 si no); **una sola venta activa por oportunidad** (409 «Esta oportunidad ya tiene su venta registrada
+  (documento «FV-900», dd-mm-aaaa)»); al guardar, la fila de la oportunidad se bloquea (`FOR UPDATE`) para que dos personas no la registren a la vez.
+  Los ítems **desactivados** después de cotizar se aceptan si ya estaban en las líneas de la oportunidad (en cualquier otra venta se rechazan).
+  El resto, igual que la venta manual (documento libre, fecha, líneas).
+- **Si ya tiene venta** cuando alguien toca el botón (otra persona la registró): aviso y se abre esa venta.
+- **Historial:** la venta guarda la oportunidad en su «creado»; la **oportunidad** anota en su historial `venta_registrada` (documento, fecha, total),
+  `venta_anulada` (con el motivo), `venta_restaurada` y `venta_reemplazada` (por una importación). En pantalla: «Venta registrada», «Venta anulada»…
+- **Anular / restaurar:** anular la venta deja la oportunidad **sin venta** (el botón de carrito vuelve y se puede registrar otra). Restaurar una venta
+  anulada exige, además del número libre, que la oportunidad no tenga ya otra venta activa (409).
+- **Con la importación:** si el archivo del ERP trae la misma factura y se importa con «reemplazar», la venta importada **hereda el vínculo** (solo si es
+  del mismo cliente): la oportunidad sigue «con su venta» y no se registra dos veces. Si es de otro cliente, no hereda y la oportunidad queda sin venta.
+  Revertir esa importación deja la oportunidad sin venta activa (la manual reemplazada no se reactiva sola, como en toda reversión).
+- **Dónde se ve el vínculo:** tarjeta **Venta** de la ficha (total, factura, fecha, «Registrada a mano … por …» o «Viene de una importación…», «Ver
+  venta»); detalle de la venta («{Oportunidad} de origen:» con enlace); Excel de ventas (columna con el título de la oportunidad).
+- **Metas:** no hay doble conteo dentro de una métrica: «Ventas» cuenta la venta y «Oportunidades ganadas» cuenta la oportunidad (métricas distintas).
+  Tras registrar, el tablero recarga su panel de metas.
+
 ### Pantalla de ventas (`/m/crm/ventas`, cualquiera con acceso al CRM)
 
 - **Acciones** (L2+): «Nueva venta» (carrito, ver arriba) e «Importar ventas».
@@ -349,6 +383,16 @@ metas (82) siguen pasando. Playwright 1280 y 375: carrito completo (búsqueda, s
 avisos), revisión sin escritura, volver y confirmar, marca «Manual», detalle con historial, anular con motivo, filtro de estado, restaurar, filtro de
 origen, número repetido sin salir del carrito, confirmación al descartar, registro desde el perfil con la meta recargada, móvil sin scroll horizontal,
 L1 sin botones; sin errores de consola (fuera del 409 que la prueba provoca a propósito).
+
+**Venta desde una oportunidad** (2026-09-25): migración `008` aplicada dos veces (idempotente). API con 41 casos (id_venta en lista y tablero, venta en el
+detalle; L1 403; validar; otro cliente, abierta, archivada, inexistente y de otra empresa; ítem desactivado que estaba en la oportunidad sí y en otra no;
+registrar con historial en venta y oportunidad; segunda venta 409; metas de ventas sí y de oportunidades ganadas no; anular, registrar otra, restaurar
+con otra activa 409 y sin ella 200; importación con «reemplazar» que hereda el vínculo (mismo cliente) o no (otro cliente); reversión; exportación con
+la oportunidad; venta manual sin oportunidad intacta). Siguen pasando venta manual (57), ventas (51) y metas (82). Playwright 1280 y 375: botón en la
+tarjeta ganada y no en la abierta, carrito con aviso, cliente fijo, 3 líneas, total, cursor en la factura y fecha de hoy; resumen con la oportunidad;
+la tarjeta pasa a «Ver venta» y el panel de metas se recarga; detalle con enlace; oportunidad sin líneas; Esc sin cambios no pregunta y con cambios sí;
+ficha con la venta e historial «Venta registrada»; registrar desde la ficha; fila de la lista; L1 sin botón; móvil sin scroll horizontal; sin errores
+de consola.
 
 ## Metas (fase C)
 
@@ -534,7 +578,8 @@ Desde las fases A–C también traen embudo con etapas, motivos de cierre, un ca
 | Editar o eliminar una nota ajena | L2 (la propia: su autor) |
 | Ver ventas, sus análisis y reportes | Acceso al módulo |
 | Importar ventas, revertir importaciones y guardar plantillas de mapeo | L2 |
-| Registrar ventas a mano (carrito); anular y restaurar las manuales | L2 |
+| Registrar ventas a mano (carrito, también desde una oportunidad ganada); anular y restaurar las manuales | L2 |
+| Ver la venta de una oportunidad («Ver venta») | Acceso al módulo |
 | Ver metas (panel, página, perfil) y exportar su informe | Acceso al módulo |
 | Crear, editar, eliminar y generar metas; configurar métricas | L4 |
 | Configurar campos, etiquetas, roles, vocabulario, moneda, embudos, etapas, motivos y catálogo; ver y aplicar plantillas | L4 |
@@ -547,8 +592,9 @@ Desde las fases A–C también traen embudo con etapas, motivos de cierre, un ca
 Oportunidades: `list_oportunidades` (`vista` lista o tablero, con resumen), `get_oportunidad`, `save_oportunidad`, `move_oportunidad`, `bulk_oportunidades`,
 `list_notas`, `save_nota`, `export_oportunidades`; configuración: `get_config`, `save_config`, `list_embudos`, `save_embudo`, `save_etapa`, `list_motivos`,
 `save_motivo`, `list_categorias_item`, `save_categoria_item`, `list_items`, `save_item`. `list_historial` acepta `tabla` (`crm_contactos` | `crm_oportunidades`).
+`list_oportunidades` trae `id_venta` por fila (su venta activa) y `get_oportunidad` trae `venta` (o null).
 Ventas: `list_ventas` (`vista` lista, clientes, items, categorias o meses; siempre con resumen; filtros también `origen` manual|importada y `estado`
-activas|inactivas|todas), `get_venta` (con `historial`), `save_venta` (venta manual; `validar=1` revisa sin guardar), `anular_venta` (`accion` anular
+activas|inactivas|todas), `get_venta` (con `historial`), `save_venta` (venta manual; `validar=1` revisa sin guardar; `id_oportunidad` = desde una oportunidad ganada), `anular_venta` (`accion` anular
 —con `motivo`— o restaurar; solo manuales), `import_ventas` (`accion` simular, iniciar, bloque o finalizar), `list_importaciones`, `revertir_importacion`,
 `list_import_plantillas`, `save_import_plantilla`, `export_ventas` (`lote` NULL = manual).
 Metas: `list_metricas`, `save_metrica`, `list_metas` (`vista` lista —filtros, corte, orden, conteo por estado—, panel —tres niveles de un día— o
@@ -564,7 +610,9 @@ importaciones, asistente de importación y carrito de venta manual), `metas` (me
 etiquetas, embudo, catálogo, métricas, roles, vocabulario y plantillas; cada pestaña se crea al abrirla). Metas: `app-metas-panel` (compacto o completo),
 diálogos de meta y de generación, `app-meta-bar`, `app-meta-estado` y `app-periodo-picker` (`pages/crm/metas-ui.ts`), funciones de período en `metas-periodo.ts`
 y `parseNumero` (`crm-format.ts`: `25.000.000` / `1.234,5` según el idioma). Diálogos: formulario de contacto, de oportunidad, de cierre, carrito de venta manual (`venta-manual-dialog.component.ts`,
-`abrirVentaManualDialog`), detalle de venta con anular/restaurar e historial (`venta-dialog.component.ts`, se cierra con `true` si cambió),
+`abrirVentaManualDialog`; `VentasUiService` en el mismo archivo abre el carrito, el carrito desde una oportunidad —`desdeOportunidad(id)`— y el detalle, con
+el mismo aviso en todas las pantallas), detalle de venta con anular/restaurar, historial y oportunidad de origen (`venta-dialog.component.ts`, se cierra
+con `true` si cambió),
 selector de etiquetas (multi, agrupado, por destino), historial (contactos y oportunidades). Componentes reutilizables:
 `app-contacto-picker` (buscador con autocompletado de un tipo de contacto), `app-item-picker` (ítems del catálogo), `app-campos-form` (campos personalizados),
 `app-tag-chip`, `app-date-input`, `app-export-menu` (botón Exportar). `CrmConfigService.money()` formatea montos con la moneda de la empresa.
@@ -573,7 +621,7 @@ Lectura de archivos: `services/import/import-parse.ts` (funciones puras con prue
 
 ## Cómo probarlo en local
 
-Migraciones 001–007 + `database/dev-seed-crm.sql` (solo desarrollo, **no** se despliega: usuarios con token conocido,
+Migraciones 001–008 + `database/dev-seed-crm.sql` (solo desarrollo, **no** se despliega: usuarios con token conocido,
 61 personas y 20 organizaciones ficticias, con jerarquía y roles, config de los tres pilotos; el embudo y el catálogo se crean aplicando una plantilla
 desde *Ajustes → Plantillas*). Login de prueba en dev:
 `window.__leDev.login('dev-token-l4')` (l5, l4, l2, l1, nocrm, otro). Ver «Desarrollo local» en `pendientes.md`.
@@ -598,6 +646,7 @@ Cada fase se prueba, se despliega y se usa sola. Todo es configurable por empres
 | **A** ✅ | **Oportunidades**: un embudo por empresa configurable (tablas listas para varios), etapas con probabilidad y tipo abierta/ganada/perdida, motivos de cierre; tablero (arrastrar con `@angular/cdk`) + lista; catálogo de ítems (producto/servicio/tratamiento) y líneas por oportunidad; notas; etiquetas y campos personalizados también para oportunidades; vocabulario `oportunidad` e `item`; visibilidad igual que contactos (L2 archiva y ve historial, L4 configura). Migración `005`. |
 | **B** ✅ | **Ventas importadas** por Excel/CSV: `crm_ventas` + líneas + lotes revertibles + plantillas de mapeo de columnas; la organización se identifica por NIT o código de cliente; pestaña «Ventas» en el perfil de la organización. El navegador lee el archivo y envía bloques al servidor. Migración `006`. |
 | **B.1** ✅ | **Venta manual (carrito)**: registrar una venta sin archivo desde *Ventas* o el perfil del contacto, con catálogo, líneas libres, revisión en el servidor sin guardar y confirmación; anular con motivo y restaurar; filtros de origen y estado; historial por venta. Sin migración (`id_importacion` NULL). Ver *Ventas → Venta manual*. |
+| **B.2** ✅ | **Venta desde una oportunidad ganada**: botón de carrito en la tarjeta, la fila y la ficha (L2+) que abre el mismo carrito con cliente fijo, líneas y fecha de hoy; una sola venta activa por oportunidad; historial en la oportunidad; el vínculo pasa a la venta importada que la reemplace. Migración `008`. Ver *Ventas → Venta desde una oportunidad ganada*. |
 | **C** ✅ | **Metas paramétricas** (empresa → sede → organización): métricas configurables (ventas en monto o cantidad, filtro por ítem o categoría, oportunidades ganadas, clientes con compra), períodos, avance y «esperado a la fecha»; panel superior en Oportunidades, página de metas, generación en lote e informe. La meta de la empresa suma las sedes de la empresa y muestra **solo el agregado** a todo el CRM (excepción documentada al aislamiento por sede). Migración `007` (ver *Metas*). |
 
 Las ventas y las metas viven dentro del CRM; sus tablas se piensan para que un futuro módulo de Ventas/Facturación escriba en las mismas.
@@ -606,6 +655,7 @@ Las ventas y las metas viven dentro del CRM; sus tablas se piensan para que un f
 
 | Fecha | Decisión |
 |---|---|
+| 2026-09-25 | Venta desde una oportunidad ganada: **acción manual** (botón de carrito), mismo carrito con todo cargado; **una sola venta activa por oportunidad**; fecha por defecto **hoy**; **L2+**; cliente fijo; vínculo `crm_ventas.id_oportunidad` (migración `008`) que pasa a la importada que la reemplace (mismo cliente) |
 | 2026-09-25 | Venta manual en las **mismas tablas** que la importada (`id_importacion` NULL), sin migración; registrar, anular y restaurar = **L2**, como importar (las ventas alimentan las metas) |
 | 2026-09-25 | Venta manual **sin edición**: se anula con motivo obligatorio y se registra de nuevo (queda rastro); solo las manuales se anulan una por una, las importadas se revierten por lote |
 | 2026-09-25 | Número de documento único entre las ventas **activas** de la sede para importadas y manuales (una importación con «reemplazar» puede reemplazar una manual); «Revisar venta» valida en el servidor con transacción revertida antes del resumen |
@@ -650,8 +700,8 @@ aviso, no bloqueo; búsqueda v0 no tolera errores de tipeo; tope de 5.000 por lo
    gráficos en el informe; metas por organización cargadas desde Excel.
 1b. Ventas: reactivar automáticamente lo que un lote revertido había reemplazado; leer `.xls` antiguos; cerrar solos los lotes «En proceso» abandonados
    (hoy se revierten a mano). Venta manual ✅ (2026-09-25), mejoras posibles: editar una venta manual (hoy se anula y se registra de nuevo); descuento
-   por línea; registrar como venta una **oportunidad ganada** con sus líneas; numeración automática opcional para quien no tiene factura; guardar el
-   carrito sin terminar (borrador).
+   por línea; numeración automática opcional para quien no tiene factura; guardar el carrito sin terminar (borrador). Venta desde una oportunidad
+   ganada ✅ (2026-09-25); si más adelante se factura por entregas parciales: varias ventas por oportunidad con «facturado X de Y».
 2. **Orden por columna** en el listado (el backend ya lo soporta: `orden`, `dir`).
 3. **Datos personales**: autorización de tratamiento por contacto; en la clínica, la historia clínica queda fuera del CRM.
 4. **Purga del historial** (política de retención a largo plazo, si se necesita).
