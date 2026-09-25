@@ -9,6 +9,10 @@ require_once __DIR__ . '/../auth.php';
 require_once __DIR__ . '/_historial.php';
 
 const CRM_TIPOS = ['persona', 'organizacion'];
+// Destinos de campos personalizados y etiquetas: los dos tipos de contacto y las oportunidades.
+const CRM_APLICA_A = ['persona', 'organizacion', 'oportunidad'];
+// Claves del vocabulario por empresa (crm_vocabulario.clave).
+const CRM_VOCAB_CLAVES = ['contacto', 'persona', 'organizacion', 'oportunidad', 'item'];
 const CRM_TIPOS_DATO = ['entero', 'decimal', 'texto', 'booleano', 'fecha'];
 const CRM_BULK_MAX = 5000;          // contactos por operación en lote
 const CRM_EXPORT_MAX = 20000;       // filas por exportación (el PDF se limita más en el navegador)
@@ -329,6 +333,14 @@ function crmBool(mixed $v, string $label): bool
     authFail(400, "$label debe ser sí o no");
 }
 
+/** Tablas de valores y de etiquetas según el destino (`aplica_a`): contactos o oportunidades. Nombres fijos: seguros para interpolar en SQL. */
+function crmEntidad(string $tipo): array
+{
+    return $tipo === 'oportunidad'
+        ? ['valores' => 'crm_oportunidad_valores', 'tags' => 'crm_oportunidad_tags', 'col' => 'id_oportunidad']
+        : ['valores' => 'crm_campos_valores', 'tags' => 'crm_contacto_tags', 'col' => 'id_contacto'];
+}
+
 /** Campos personalizados de la empresa, opcionalmente solo de un tipo de contacto y/o solo activos. */
 function crmCampos(mysqli $conn, int $idEmpresa, ?string $aplicaA = null, bool $soloActivos = false): array
 {
@@ -386,13 +398,14 @@ function crmValorDeFila(array $row, string $tipo): int|string|bool|null
 /** Campos aplicables a un contacto con su valor actual: los activos y los inactivos que aún tienen valor. */
 function crmCamposConValor(mysqli $conn, array $ctx, int $idContacto, string $tipo): array
 {
+    $e = crmEntidad($tipo);
     $rows = crmRows($conn,
-        'SELECT d.id, d.clave, d.etiqueta, d.tipo_dato, d.obligatorio, d.orden, d.activo,
+        "SELECT d.id, d.clave, d.etiqueta, d.tipo_dato, d.obligatorio, d.orden, d.activo,
                 v.valor_entero, v.valor_decimal, v.valor_texto, v.valor_booleano, v.valor_fecha
            FROM crm_campos_personalizados d
-      LEFT JOIN crm_campos_valores v ON v.id_campo = d.id AND v.id_contacto = ?
-          WHERE d.id_empresa = ? AND d.aplica_a = ? AND (d.activo = 1 OR v.id_contacto IS NOT NULL)
-       ORDER BY d.orden, d.id', 'iis', [$idContacto, $ctx['id_empresa'], $tipo]);
+      LEFT JOIN {$e['valores']} v ON v.id_campo = d.id AND v.{$e['col']} = ?
+          WHERE d.id_empresa = ? AND d.aplica_a = ? AND (d.activo = 1 OR v.{$e['col']} IS NOT NULL)
+       ORDER BY d.orden, d.id", 'iis', [$idContacto, $ctx['id_empresa'], $tipo]);
     return array_map(static fn($r) => [
         'id' => (int)$r['id'], 'clave' => $r['clave'], 'etiqueta' => $r['etiqueta'], 'tipo_dato' => $r['tipo_dato'],
         'obligatorio' => (int)$r['obligatorio'] === 1, 'activo' => (int)$r['activo'] === 1,
@@ -407,6 +420,7 @@ function crmCamposConValor(mysqli $conn, array $ctx, int $idContacto, string $ti
  */
 function crmGuardarCampos(mysqli $conn, array $ctx, int $idContacto, string $tipo, array $valores): array
 {
+    $e = crmEntidad($tipo);
     $defs = [];
     foreach (crmCampos($conn, $ctx['id_empresa'], $tipo, true) as $d) $defs[$d['id']] = $d;
 
@@ -427,7 +441,7 @@ function crmGuardarCampos(mysqli $conn, array $ctx, int $idContacto, string $tip
         $antes[$key] = $actuales[$idCampo]['valor'] ?? null;
 
         if ($col === null) {
-            crmExec($conn, 'DELETE FROM crm_campos_valores WHERE id_contacto = ? AND id_campo = ?', 'ii', [$idContacto, $idCampo]);
+            crmExec($conn, "DELETE FROM {$e['valores']} WHERE {$e['col']} = ? AND id_campo = ?", 'ii', [$idContacto, $idCampo]);
             $despues[$key] = null;
             $final[$idCampo] = false;
             continue;
@@ -435,11 +449,11 @@ function crmGuardarCampos(mysqli $conn, array $ctx, int $idContacto, string $tip
         $vals = ['valor_entero' => null, 'valor_decimal' => null, 'valor_texto' => null, 'valor_booleano' => null, 'valor_fecha' => null];
         $vals = array_merge($vals, $col);
         crmExec($conn,
-            'INSERT INTO crm_campos_valores (id_contacto, id_campo, valor_entero, valor_decimal, valor_texto, valor_booleano, valor_fecha, created_by, updated_by)
+            "INSERT INTO {$e['valores']} ({$e['col']}, id_campo, valor_entero, valor_decimal, valor_texto, valor_booleano, valor_fecha, created_by, updated_by)
              VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
              ON DUPLICATE KEY UPDATE valor_entero = VALUES(valor_entero), valor_decimal = VALUES(valor_decimal),
                                      valor_texto = VALUES(valor_texto), valor_booleano = VALUES(valor_booleano),
-                                     valor_fecha = VALUES(valor_fecha), updated_by = VALUES(updated_by)',
+                                     valor_fecha = VALUES(valor_fecha), updated_by = VALUES(updated_by)",
             'iiissisii', [$idContacto, $idCampo, $vals['valor_entero'], $vals['valor_decimal'], $vals['valor_texto'],
                 $vals['valor_booleano'], $vals['valor_fecha'], $ctx['id_usuario'], $ctx['id_usuario']]);
         $despues[$key] = crmValorDeFila($vals, $def['tipo_dato']);
@@ -485,10 +499,11 @@ function crmSetTags(mysqli $conn, array $ctx, int $idContacto, string $tipo, arr
 {
     $tagIds = crmInts($tagIds);
     if (count($tagIds) > 50) authFail(400, 'Demasiadas etiquetas');
+    $e = crmEntidad($tipo);
 
     $actuales = [];
     foreach (crmRows($conn,
-        'SELECT ct.id_tag, t.nombre FROM crm_contacto_tags ct JOIN crm_tags t ON t.id = ct.id_tag WHERE ct.id_contacto = ?',
+        "SELECT ct.id_tag, t.nombre FROM {$e['tags']} ct JOIN crm_tags t ON t.id = ct.id_tag WHERE ct.{$e['col']} = ?",
         'i', [$idContacto]) as $r) $actuales[(int)$r['id_tag']] = $r['nombre'];
 
     $agregar = array_values(array_diff($tagIds, array_keys($actuales)));
@@ -502,12 +517,12 @@ function crmSetTags(mysqli $conn, array $ctx, int $idContacto, string $tipo, arr
             if (!$d) authFail(400, 'Etiqueta inexistente');
             if ((int)$d['activo'] !== 1) authFail(400, 'La etiqueta «' . $d['nombre'] . '» está desactivada');
             if ($d['aplica_a'] !== null && $d['aplica_a'] !== $tipo) authFail(400, 'La etiqueta «' . $d['nombre'] . '» no aplica a este tipo de contacto');
-            crmExec($conn, 'INSERT INTO crm_contacto_tags (id_contacto, id_tag, created_by) VALUES (?, ?, ?)', 'iii', [$idContacto, $id, $ctx['id_usuario']]);
+            crmExec($conn, "INSERT INTO {$e['tags']} ({$e['col']}, id_tag, created_by) VALUES (?, ?, ?)", 'iii', [$idContacto, $id, $ctx['id_usuario']]);
             $agregados[] = $d['nombre'];
         }
     }
     foreach ($quitar as $id) {
-        crmExec($conn, 'DELETE FROM crm_contacto_tags WHERE id_contacto = ? AND id_tag = ?', 'ii', [$idContacto, $id]);
+        crmExec($conn, "DELETE FROM {$e['tags']} WHERE {$e['col']} = ? AND id_tag = ?", 'ii', [$idContacto, $id]);
         $quitados[] = $actuales[$id];
     }
     return ['agregados' => $agregados, 'quitados' => $quitados];

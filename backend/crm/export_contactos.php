@@ -46,7 +46,7 @@ $rows = crmRows($conn,
       LIMIT ? OFFSET ?",
     $w['types'] . 'ii', [...$w['params'], $porPagina, ($pagina - 1) * $porPagina]);
 
-$campos = array_values(array_filter(crmCampos($conn, $ctx['id_empresa']), static fn($d) => $d['activo']));
+$campos = array_values(array_filter(crmCampos($conn, $ctx['id_empresa']), static fn($d) => $d['activo'] && in_array($d['aplica_a'], CRM_TIPOS, true)));
 $tipoCampo = [];
 foreach ($campos as $d) $tipoCampo[$d['id']] = $d['tipo_dato'];
 

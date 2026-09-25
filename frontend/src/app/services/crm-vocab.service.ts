@@ -1,13 +1,14 @@
 import { Injectable, computed, effect, inject, signal } from '@angular/core';
 import { ResolveFn } from '@angular/router';
 import { ClaveVocabulario, CrmService, Vocabulario } from './crm.service';
+import { CrmConfigService } from './crm-config.service';
 import { SessionService } from './session.service';
 import { TranslationService } from './translation.service';
 
-export const VOCAB_CLAVES: readonly ClaveVocabulario[] = ['contacto', 'persona', 'organizacion'];
+export const VOCAB_CLAVES: readonly ClaveVocabulario[] = ['contacto', 'persona', 'organizacion', 'oportunidad', 'item'];
 
-const PLURAL: Record<ClaveVocabulario, string> = { contacto: 'contactos', persona: 'personas', organizacion: 'organizaciones' };
-const CAPITAL: Record<ClaveVocabulario, string> = { contacto: 'Contacto', persona: 'Persona', organizacion: 'Organizacion' };
+const PLURAL: Record<ClaveVocabulario, string> = { contacto: 'contactos', persona: 'personas', organizacion: 'organizaciones', oportunidad: 'oportunidades', item: 'items' };
+const CAPITAL: Record<ClaveVocabulario, string> = { contacto: 'Contacto', persona: 'Persona', organizacion: 'Organizacion', oportunidad: 'Oportunidad', item: 'Item' };
 
 const minus = (s: string): string => s.toLocaleLowerCase();
 const mayus = (s: string): string => s.charAt(0).toLocaleUpperCase() + s.slice(1);
@@ -69,8 +70,8 @@ export class CrmVocabService {
   }
 }
 
-/** Carga el vocabulario antes de mostrar una pantalla del CRM (evita ver un instante los nombres por defecto). */
+/** Carga el vocabulario y la configuración de montos antes de mostrar una pantalla del CRM (evita ver un instante los valores por defecto). */
 export const crmVocabResolver: ResolveFn<boolean> = async () => {
-  await inject(CrmVocabService).load();
+  await Promise.all([inject(CrmVocabService).load(), inject(CrmConfigService).load()]);
   return true;
 };

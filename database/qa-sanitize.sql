@@ -34,6 +34,11 @@ BEGIN
        SET c.busqueda = LEFT(CONCAT_WS(' ', c.nombre_completo, COALESCE(p.correo, o.correo_facturacion), c.telefono,
                                        COALESCE(p.documento_numero, o.documento_numero), p.whatsapp_numero), 1000);
   END IF;
+  -- Oportunidades (migración 005): las notas y descripciones son texto libre y pueden traer datos personales de un cliente real.
+  IF (SELECT COUNT(*) FROM information_schema.tables WHERE table_schema = DATABASE() AND table_name = 'crm_oportunidades') > 0 THEN
+    UPDATE crm_oportunidad_notas SET nota = CONCAT('Nota ', id);
+    UPDATE crm_oportunidades SET descripcion = IF(descripcion IS NULL, NULL, CONCAT('Descripción de la oportunidad ', id));
+  END IF;
 END//
 DELIMITER ;
 CALL le_qa_sanitize_crm();

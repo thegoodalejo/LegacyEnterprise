@@ -7,12 +7,14 @@ import { MatIcon } from '@angular/material/icon';
 import { MatInput } from '@angular/material/input';
 import { MatOption, MatSelect } from '@angular/material/select';
 import { MatSlideToggle } from '@angular/material/slide-toggle';
-import { MatTab, MatTabGroup } from '@angular/material/tabs';
+import { MatTab, MatTabContent, MatTabGroup } from '@angular/material/tabs';
 import { TagChipComponent } from '../../components/tag-chip.component';
-import { CampoDef, CatalogoTags, CrmService, TagDef, TagGrupo, TipoContacto, TipoDato } from '../../services/crm.service';
+import { AplicaA, CampoDef, CatalogoTags, CrmService, TagDef, TagGrupo, TipoDato } from '../../services/crm.service';
 import { DialogService, dialogSize } from '../../services/dialog.service';
 import { LoadingService } from '../../services/loading.service';
 import { TranslatePipe, TranslationService } from '../../services/translation.service';
+import { CrmCatalogoTabComponent } from './crm-catalogo-tab.component';
+import { CrmEmbudoTabComponent } from './crm-embudo-tab.component';
 import { CrmRolesTabComponent } from './crm-roles-tab.component';
 import { CrmTemplatesTabComponent } from './crm-templates-tab.component';
 import { CrmVocabTabComponent } from './crm-vocab-tab.component';
@@ -33,6 +35,7 @@ const TIPOS_DATO: TipoDato[] = ['entero', 'decimal', 'texto', 'booleano', 'fecha
           <mat-select [(ngModel)]="aplicaA" [disabled]="editing" id="campo-aplica">
             <mat-option value="persona">{{ 'crm.tipo.personas' | translate }}</mat-option>
             <mat-option value="organizacion">{{ 'crm.tipo.organizaciones' | translate }}</mat-option>
+            <mat-option value="oportunidad">{{ 'crm.tipo.oportunidades' | translate }}</mat-option>
           </mat-select>
         </mat-form-field>
         <mat-form-field appearance="outline">
@@ -70,7 +73,7 @@ const TIPOS_DATO: TipoDato[] = ['entero', 'decimal', 'texto', 'booleano', 'fecha
   `,
 })
 export class CampoDialogComponent {
-  readonly c = inject<CampoDef | { aplica_a: TipoContacto } | null>(MAT_DIALOG_DATA) as (CampoDef & { id?: number }) | null;
+  readonly c = inject<CampoDef | { aplica_a: AplicaA } | null>(MAT_DIALOG_DATA) as (CampoDef & { id?: number }) | null;
   private ref = inject(MatDialogRef<CampoDialogComponent, boolean>);
   private crm = inject(CrmService);
   private dialogs = inject(DialogService);
@@ -79,7 +82,7 @@ export class CampoDialogComponent {
   readonly tipos = TIPOS_DATO;
   readonly saving = signal(false);
   readonly editing = !!this.c?.id;
-  aplicaA: TipoContacto = this.c?.aplica_a ?? 'persona';
+  aplicaA: AplicaA = this.c?.aplica_a ?? 'persona';
   etiqueta = this.editing ? this.c!.etiqueta : '';
   clave = '';
   tipoDato: TipoDato = this.editing ? this.c!.tipo_dato : 'texto';
@@ -188,6 +191,7 @@ interface TagDialogData { tag: TagDef | null; grupos: TagGrupo[]; idGrupo?: numb
             <mat-option value="">{{ 'crm.config.both' | translate }}</mat-option>
             <mat-option value="persona">{{ 'crm.tipo.personas' | translate }}</mat-option>
             <mat-option value="organizacion">{{ 'crm.tipo.organizaciones' | translate }}</mat-option>
+            <mat-option value="oportunidad">{{ 'crm.tipo.oportunidades' | translate }}</mat-option>
           </mat-select>
         </mat-form-field>
         <div class="form-row">
@@ -221,7 +225,7 @@ export class TagDialogComponent {
   nombre = this.d.tag?.nombre ?? '';
   color = this.d.tag?.color ?? '#1E88E5';
   idGrupo: number | null = this.d.tag ? this.d.tag.id_grupo : (this.d.idGrupo ?? null);
-  aplicaA: TipoContacto | '' = this.d.tag?.aplica_a ?? '';
+  aplicaA: AplicaA | '' = this.d.tag?.aplica_a ?? '';
   orden = this.d.tag?.orden ?? 0;
   activo = this.d.tag?.activo ?? true;
 
@@ -243,11 +247,11 @@ export class TagDialogComponent {
 }
 
 // ─── Página ──────────────────────────────────────────────────────────────────────────────────────────────────────
-/** Configuración del CRM por empresa (L4+): campos personalizados de Personas/Organizaciones y catálogo de etiquetas. */
+/** Configuración del CRM por empresa (L4+): campos personalizados, etiquetas, embudo, catálogo, roles, vocabulario y plantillas. */
 @Component({
   selector: 'app-crm-config-page',
   changeDetection: ChangeDetectionStrategy.OnPush,
-  imports: [MatButton, MatIconButton, MatIcon, MatTab, MatTabGroup, TagChipComponent, CrmRolesTabComponent, CrmTemplatesTabComponent, CrmVocabTabComponent, TranslatePipe],
+  imports: [MatButton, MatIconButton, MatIcon, MatTab, MatTabContent, MatTabGroup, TagChipComponent, CrmRolesTabComponent, CrmTemplatesTabComponent, CrmVocabTabComponent, CrmEmbudoTabComponent, CrmCatalogoTabComponent, TranslatePipe],
   template: `
     <div class="page">
       <header class="page-header"><h1>{{ 'crm.config.title' | translate }}</h1></header>
@@ -255,10 +259,10 @@ export class TagDialogComponent {
         <mat-tab [label]="'crm.config.fields' | translate">
           <div class="tab">
             <p class="muted">{{ 'crm.config.fields_hint' | translate }}</p>
-            @for (tipo of tiposContacto; track tipo) {
+            @for (tipo of destinos; track tipo) {
               <section class="block">
                 <div class="block-head">
-                  <h2>{{ 'crm.tipo.' + tipo + 's' | translate }}</h2>
+                  <h2>{{ nombreDestino(tipo) | translate }}</h2>
                   <button mat-stroked-button [id]="'btn-new-campo-' + tipo" (click)="editCampo({ aplica_a: tipo })"><mat-icon>add</mat-icon>{{ 'crm.config.new_field' | translate }}</button>
                 </div>
                 @for (f of camposDe(tipo); track f.id) {
@@ -310,7 +314,10 @@ export class TagDialogComponent {
             </section>
           </div>
         </mat-tab>
-        <mat-tab [label]="'crm.config.roles' | translate"><app-crm-roles-tab /></mat-tab>
+        <!-- Con matTabContent cada pestaña se crea al abrirla: siempre muestra lo último (p. ej. tras aplicar una plantilla). -->
+        <mat-tab [label]="'crm.config.funnel' | translate"><ng-template matTabContent><app-crm-embudo-tab /></ng-template></mat-tab>
+        <mat-tab [label]="'crm.config.catalog' | translate"><ng-template matTabContent><app-crm-catalogo-tab /></ng-template></mat-tab>
+        <mat-tab [label]="'crm.config.roles' | translate"><ng-template matTabContent><app-crm-roles-tab /></ng-template></mat-tab>
         <mat-tab [label]="'crm.config.vocab' | translate"><app-crm-vocab-tab /></mat-tab>
         <mat-tab [label]="'crm.config.templates' | translate"><app-crm-templates-tab (applied)="load()" /></mat-tab>
       </mat-tab-group>
@@ -336,10 +343,11 @@ export default class CrmConfigPage {
   private loading = inject(LoadingService);
   private matDialog = inject(MatDialog);
 
-  readonly tiposContacto: TipoContacto[] = ['persona', 'organizacion'];
+  readonly destinos: AplicaA[] = ['persona', 'organizacion', 'oportunidad'];
   readonly campos = signal<CampoDef[]>([]);
   readonly catalogo = signal<CatalogoTags>({ grupos: [], tags: [] });
-  readonly camposDe = (tipo: TipoContacto) => this.campos().filter(c => c.aplica_a === tipo);
+  readonly camposDe = (tipo: AplicaA) => this.campos().filter(c => c.aplica_a === tipo);
+  readonly nombreDestino = (t: AplicaA): string => (t === 'persona' ? 'crm.tipo.personas' : t === 'organizacion' ? 'crm.tipo.organizaciones' : 'crm.tipo.oportunidades');
   readonly tagsDe = (idGrupo: number | null) => this.catalogo().tags.filter(t => (idGrupo === null ? !this.catalogo().grupos.some(g => g.id === t.id_grupo) : t.id_grupo === idGrupo));
 
   constructor() {
@@ -357,7 +365,7 @@ export default class CrmConfigPage {
       .afterClosed().subscribe(saved => { if (saved) void this.load(); });
   }
 
-  editCampo(c: CampoDef | { aplica_a: TipoContacto }): void { this.open(CampoDialogComponent, c); }
+  editCampo(c: CampoDef | { aplica_a: AplicaA }): void { this.open(CampoDialogComponent, c); }
   editGrupo(g: TagGrupo | null): void { this.open(GrupoDialogComponent, g); }
   editTag(t: TagDef | null, idGrupo?: number): void {
     this.open(TagDialogComponent, { tag: t, grupos: this.catalogo().grupos, idGrupo } satisfies TagDialogData);

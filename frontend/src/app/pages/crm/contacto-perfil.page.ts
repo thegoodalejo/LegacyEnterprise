@@ -6,7 +6,8 @@ import { MatIcon } from '@angular/material/icon';
 import { MatTooltip } from '@angular/material/tooltip';
 import { TagChipComponent } from '../../components/tag-chip.component';
 import { TagPickerDialogComponent, TagPickerResult } from '../../components/tag-picker-dialog.component';
-import { CampoConValor, ContactoDetalle, CrmService } from '../../services/crm.service';
+import { CrmConfigService } from '../../services/crm-config.service';
+import { CampoConValor, ContactoDetalle, CrmService, OportunidadFila } from '../../services/crm.service';
 import { DialogService, dialogSize } from '../../services/dialog.service';
 import { LoadingService } from '../../services/loading.service';
 import { SessionService } from '../../services/session.service';
@@ -14,6 +15,7 @@ import { TranslatePipe, TranslationService } from '../../services/translation.se
 import { ContactoDialogComponent, ContactoDialogResult } from './contacto-dialog.component';
 import { formatCoords, formatDateTime, initials, isoToDmy, mapsUrl } from './crm-format';
 import { HistorialDialogComponent } from './historial-dialog.component';
+import { abrirOportunidadDialog } from './oportunidad-dialog.component';
 
 /** Perfil de un Persona u Organización: datos, vínculos, etiquetas, campos personalizados, auditoría e historial. */
 @Component({
@@ -116,6 +118,23 @@ import { HistorialDialogComponent } from './historial-dialog.component';
             </div>
           </section>
 
+          <section class="card" id="profile-opps">
+            <div class="card-head">
+              <h2>{{ 'crm.opp.of_contact' | translate }}</h2>
+              <button mat-button id="btn-new-opp" (click)="newOpp()"><mat-icon>add</mat-icon>{{ 'crm.opp.new' | translate }}</button>
+            </div>
+            @for (o of opps(); track o.id) {
+              <a class="link-row" [routerLink]="['/m/crm/oportunidades', o.id]">
+                <mat-icon>trending_up</mat-icon>
+                <span class="link-text">
+                  <strong>{{ o.titulo }}</strong>
+                  <span class="muted small">{{ o.etapa_nombre }} · {{ cfg.money(o.valor) }}</span>
+                </span>
+              </a>
+            } @empty { <p class="muted">—</p> }
+            @if (oppsTotal() > opps().length) { <a mat-button routerLink="/m/crm/oportunidades" class="more-opps">{{ 'crm.opp.see_all' | translate: { n: oppsTotal() } }}</a> }
+          </section>
+
           @if (det.campos.length) {
             <section class="card">
               <h2>{{ 'crm.form.custom' | translate }}</h2>
@@ -165,6 +184,7 @@ import { HistorialDialogComponent } from './historial-dialog.component';
     .small { font: var(--mat-sys-body-small); }
     .inline-link { color: var(--md-sys-color-primary); }
     .audit { display: flex; flex-wrap: wrap; gap: 4px 24px; margin-top: 20px; }
+    .more-opps { align-self: flex-start; }
   `,
 })
 export default class ContactoPerfilPage {
@@ -177,8 +197,11 @@ export default class ContactoPerfilPage {
   private router = inject(Router);
   private session = inject(SessionService);
   private i18n = inject(TranslationService);
+  readonly cfg = inject(CrmConfigService);
 
   readonly d = signal<ContactoDetalle | null>(null);
+  readonly opps = signal<OportunidadFila[]>([]);
+  readonly oppsTotal = signal(0);
   readonly notFound = signal(false);
   readonly canAudit = computed(() => this.session.hasMinRole('L2'));
   readonly ini = computed(() => initials(this.d()?.contacto.nombre_completo ?? ''));
@@ -199,8 +222,21 @@ export default class ContactoPerfilPage {
   async load(id = Number(this.id())): Promise<void> {
     this.notFound.set(false);
     const r = await this.loading.wrap(() => this.crm.getContacto(id));
-    if (r.action && r.data) this.d.set(r.data);
+    if (r.action && r.data) { this.d.set(r.data); void this.loadOpps(id); }
     else { this.d.set(null); this.notFound.set(true); }
+  }
+
+  /** Oportunidades activas de este contacto (como cliente o como persona de contacto). */
+  private async loadOpps(id: number): Promise<void> {
+    try {
+      const r = await this.crm.listOportunidades({ contacto: id, archivo: 'activas' }, 1, 5, 'creado', 'desc');
+      if (r.action && r.data) { this.opps.set(r.data.oportunidades); this.oppsTotal.set(r.data.total); }
+    } catch { /* la tarjeta queda vacía: no impide ver el perfil */ }
+  }
+
+  newOpp(): void {
+    const c = this.d()?.contacto;
+    if (c) abrirOportunidadDialog(this.matDialog, { contacto: { id: c.id, nombre: c.nombre_completo, tipo: c.tipo } }).afterClosed().subscribe(r => { if (r) void this.loadOpps(c.id); });
   }
 
   fmt(iso: string): string { return isoToDmy(iso); }

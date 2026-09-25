@@ -7,11 +7,11 @@ import { LoadingService } from '../../services/loading.service';
 import { TranslatePipe, TranslationService } from '../../services/translation.service';
 import { formatDateTime, isoToDmy } from './crm-format';
 
-export interface HistorialDialogData { id: number; nombre: string }
+export interface HistorialDialogData { id: number; nombre: string; tabla?: 'crm_contactos' | 'crm_oportunidades' }
 
 interface Linea { id: number; icon: string; titulo: string; detalles: string[]; usuario: string; fecha: string; lote: boolean }
 
-/** Historial de cambios de un contacto: por defecto los últimos 3 meses; "Ver anteriores" muestra todo lo guardado. */
+/** Historial de cambios de un contacto o de una oportunidad: por defecto los últimos 3 meses; "Ver anteriores" muestra todo lo guardado. */
 @Component({
   selector: 'app-historial-dialog',
   changeDetection: ChangeDetectionStrategy.OnPush,
@@ -94,7 +94,7 @@ export class HistorialDialogComponent {
     if (reset) { this.pagina = 0; this.entradas.set([]); }
     this.cargando.set(true);
     try {
-      const r = await this.loading.wrap(() => this.crm.listHistorial(this.d.id, this.todo() ? '2000-01-01' : null, this.pagina + 1));
+      const r = await this.loading.wrap(() => this.crm.listHistorial(this.d.id, this.todo() ? '2000-01-01' : null, this.pagina + 1, this.d.tabla ?? 'crm_contactos'));
       if (r.action && r.data) {
         this.pagina = r.data.pagina;
         this.entradas.update(l => [...l, ...r.data!.historial]);
@@ -149,6 +149,13 @@ export class HistorialDialogComponent {
       case 'restaurado': return { ...base, icon: 'restore_from_trash', titulo: this.t('crm.hist.restored'), detalles: [] };
       case 'tags_agregados': return { ...base, icon: 'label', titulo: this.t('crm.hist.tags_added', { tags: tagsLote }), detalles: [] };
       case 'tags_quitados': return { ...base, icon: 'label_off', titulo: this.t('crm.hist.tags_removed', { tags: tagsLote }), detalles: [] };
+      case 'etapa_cambiada':
+        return {
+          ...base, icon: 'swap_horiz', titulo: this.t('crm.hist.stage_changed', { from: det.desde?.nombre ?? '—', to: det.hasta?.nombre ?? '—' }),
+          detalles: det.motivo ? [this.t('crm.hist.reason', { reason: det.motivo })] : [],
+        };
+      case 'nota_agregada': return { ...base, icon: 'sticky_note_2', titulo: this.t('crm.hist.note_added'), detalles: [] };
+      case 'nota_eliminada': return { ...base, icon: 'speaker_notes_off', titulo: this.t('crm.hist.note_removed'), detalles: [] };
       case 'vinculo_agregado':
       case 'vinculo_actualizado':
       case 'vinculo_quitado': {

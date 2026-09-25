@@ -7,7 +7,7 @@ import { MatFormField, MatLabel, MatPrefix } from '@angular/material/form-field'
 import { MatIcon } from '@angular/material/icon';
 import { MatInput } from '@angular/material/input';
 import { normalizeText } from '../pages/crm/crm-format';
-import { CatalogoTags, CrmService, CrmTag, TagDef, TipoContacto } from '../services/crm.service';
+import { AplicaA, CatalogoTags, CrmService, CrmTag, TagDef } from '../services/crm.service';
 import { LoadingService } from '../services/loading.service';
 import { TranslatePipe } from '../services/translation.service';
 import { TagChipComponent } from './tag-chip.component';
@@ -17,8 +17,8 @@ export interface TagPickerData {
   seleccion?: number[];
   /** Etiquetas que el contacto ya tiene (pueden estar desactivadas y no venir en el catálogo activo): se conservan si siguen marcadas. */
   actuales?: CrmTag[];
-  /** Si viene, solo se ofrecen las etiquetas que aplican a ese tipo de contacto. Sin tipo (lote): todas, con aviso. */
-  tipo?: TipoContacto | null;
+  /** Si viene, solo se ofrecen las etiquetas que aplican a ese destino. Sin destino (filtros y lotes de contactos): todas las de contactos, con aviso. */
+  tipo?: AplicaA | null;
   title?: string;
   confirmText?: string;
 }
@@ -51,7 +51,7 @@ interface GrupoVista { id: number | null; nombre: string; tags: TagDef[] }
             @for (t of g.tags; track t.id) {
               <div class="tag-row">
                 <mat-checkbox [checked]="selected().has(t.id)" (change)="toggle(t.id)"><app-tag-chip [nombre]="t.nombre" [color]="t.color" /></mat-checkbox>
-                @if (!d.tipo && t.aplica_a) {
+                @if (!d.tipo && t.aplica_a && t.aplica_a !== 'oportunidad') {
                   <span class="muted only">{{ (t.aplica_a === 'persona' ? 'crm.tags.only_persona' : 'crm.tags.only_organizacion') | translate }}</span>
                 }
               </div>
@@ -96,7 +96,7 @@ export class TagPickerDialogComponent {
     const q = normalizeText(this.term());
     const { grupos, tags } = this.catalogo();
     const visibles = tags.filter(t =>
-      (!this.d.tipo || !t.aplica_a || t.aplica_a === this.d.tipo) && (!q || normalizeText(t.nombre).includes(q)));
+      (this.d.tipo ? (!t.aplica_a || t.aplica_a === this.d.tipo) : t.aplica_a !== 'oportunidad') && (!q || normalizeText(t.nombre).includes(q)));
     const out: GrupoVista[] = grupos
       .map(g => ({ id: g.id as number | null, nombre: g.nombre, tags: visibles.filter(t => t.id_grupo === g.id) }))
       .filter(g => g.tags.length);

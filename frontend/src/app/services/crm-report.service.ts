@@ -1,5 +1,7 @@
 import { Injectable, inject } from '@angular/core';
 import { CrmService, ExportCampoDef, ExportContacto, SeleccionExport, TipoDato } from './crm.service';
+import { DialogService } from './dialog.service';
+import { LoadingService } from './loading.service';
 import { ColumnaTipo, FormatoReporte, ReportColumna, ReportFila, ReportIndicador, ReportSpec, ReportTabla } from './reports/report-spec';
 import { ReportService } from './reports/report.service';
 import { TranslationService } from './translation.service';
@@ -122,5 +124,29 @@ export class CrmReportService {
       resumen,
       detalle: [{ titulo: t('crm.report.sheet'), columnas, filas: filas.map(fila) }],
     };
+  }
+}
+
+/**
+ * Ejecuta una exportación con el loader y avisa lo que corresponda: tope de filas del PDF o error. Úsalo en todos los botones «Exportar».
+ * `fn` devuelve un ResultadoExportacion o nada (exportaciones que no pueden fallar por datos, como la ficha de un registro).
+ */
+export async function ejecutarExportacion(
+  deps: { loading: LoadingService; dialogs: DialogService; i18n: TranslationService },
+  fn: () => Promise<ResultadoExportacion | void>,
+): Promise<void> {
+  const t = (k: string, p?: Record<string, string | number>) => deps.i18n.t(k, p);
+  try {
+    const r = await deps.loading.wrap(fn, { loadingText: t('report.generating') });
+    if (!r || r.ok) return;
+    if (r.limitePdf) {
+      const lang = deps.i18n.lang();
+      await deps.dialogs.info({ title: t('report.pdf_limit_title'), message: t('report.pdf_limit', { n: r.limitePdf.total.toLocaleString(lang), max: r.limitePdf.max.toLocaleString(lang) }) });
+    } else {
+      await deps.dialogs.error({ title: t('report.error_title'), message: r.mensaje });
+    }
+  } catch (err) {
+    console.error('[reportes] no se pudo generar el reporte', err);
+    await deps.dialogs.error({ title: t('report.error_title'), message: t('report.error_generic') });
   }
 }

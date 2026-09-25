@@ -21,7 +21,7 @@ import {
   AccionLote, CampoDef, ContactoFila, CrmService, CrmTag, EstadoFiltro, FiltroCampo, Filtros, ResultadoLote, Seleccion,
   SeleccionExport, TipoContacto, UsuarioSede,
 } from '../../services/crm.service';
-import { CrmReportService } from '../../services/crm-report.service';
+import { CrmReportService, ejecutarExportacion } from '../../services/crm-report.service';
 import { DialogService, dialogSize } from '../../services/dialog.service';
 import { LoadingService } from '../../services/loading.service';
 import { SessionService } from '../../services/session.service';
@@ -378,12 +378,12 @@ const OP_KEY: Record<string, string> = {
 export default class ContactosPage {
   private crm = inject(CrmService);
   private reportes = inject(CrmReportService);
-  private loading = inject(LoadingService);
-  private dialogs = inject(DialogService);
+  readonly loading = inject(LoadingService);
+  readonly dialogs = inject(DialogService);
   private matDialog = inject(MatDialog);
   private router = inject(Router);
   private session = inject(SessionService);
-  private i18n = inject(TranslationService);
+  readonly i18n = inject(TranslationService);
 
   // ─── Filtros ───────────────────────────────────────────────────────────────────────────────────────────────────
   readonly qInput = signal('');
@@ -486,7 +486,7 @@ export default class ContactosPage {
 
   private async loadCatalogs(): Promise<void> {
     const [c, u] = await Promise.all([this.crm.listCampos(true), this.crm.listResponsables()]);
-    if (c.action && c.data) this.camposDef.set(c.data.campos);
+    if (c.action && c.data) this.camposDef.set(c.data.campos.filter(x => x.aplica_a !== 'oportunidad'));
     if (u.action && u.data) this.responsables.set(u.data.usuarios);
   }
 
@@ -624,15 +624,7 @@ export default class ContactosPage {
       seleccion = { filtros: { estado: 'todos' }, excluidos: [] };
       filtrosTexto = [t('crm.export.scope_all')];
     }
-    try {
-      const r = await this.loading.wrap(() => this.reportes.exportarContactos({ seleccion, formato: e.formato, filtrosTexto }), { loadingText: t('report.generating') });
-      if (r.ok) return;
-      if (r.limitePdf) await this.dialogs.info({ title: t('report.pdf_limit_title'), message: t('report.pdf_limit', { n: r.limitePdf.total.toLocaleString(this.i18n.lang()), max: r.limitePdf.max.toLocaleString(this.i18n.lang()) }) });
-      else await this.dialogs.error({ title: t('report.error_title'), message: r.mensaje });
-    } catch (err) {
-      console.error('[reportes] no se pudo generar el reporte', err);
-      await this.dialogs.error({ title: t('report.error_title'), message: t('report.error_generic') });
-    }
+    await ejecutarExportacion(this, () => this.reportes.exportarContactos({ seleccion, formato: e.formato, filtrosTexto }));
   }
 
   /** Los filtros activos en lenguaje natural, para el encabezado del reporte. */

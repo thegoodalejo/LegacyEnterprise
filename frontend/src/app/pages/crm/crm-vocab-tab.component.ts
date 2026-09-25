@@ -11,7 +11,7 @@ import { TranslatePipe, TranslationService } from '../../services/translation.se
 
 interface Fila { singular: string; plural: string }
 
-/** Pestaña «Vocabulario»: cómo llama la empresa a Contacto, Persona y Organización en todo el CRM. */
+/** Pestaña «Vocabulario»: cómo llama la empresa a Contacto, Persona, Organización, Oportunidad e Ítem en todo el CRM. */
 @Component({
   selector: 'app-crm-vocab-tab',
   changeDetection: ChangeDetectionStrategy.OnPush,
@@ -57,20 +57,18 @@ export class CrmVocabTabComponent {
 
   readonly claves = VOCAB_CLAVES;
   readonly saving = signal(false);
-  readonly filas = signal<Record<ClaveVocabulario, Fila>>({
-    contacto: { singular: '', plural: '' }, persona: { singular: '', plural: '' }, organizacion: { singular: '', plural: '' },
-  });
+  readonly filas = signal<Record<ClaveVocabulario, Fila>>(this.vacias());
 
   constructor() {
     // Lo guardado (personalizado) llena el formulario; vacío = usa el nombre por defecto.
     effect(() => {
       const o = this.voc.overrides();
-      untracked(() => this.filas.set({
-        contacto: { singular: o.contacto?.singular ?? '', plural: o.contacto?.plural ?? '' },
-        persona: { singular: o.persona?.singular ?? '', plural: o.persona?.plural ?? '' },
-        organizacion: { singular: o.organizacion?.singular ?? '', plural: o.organizacion?.plural ?? '' },
-      }));
+      untracked(() => this.filas.set(Object.fromEntries(this.claves.map(k => [k, { singular: o[k]?.singular ?? '', plural: o[k]?.plural ?? '' }])) as Record<ClaveVocabulario, Fila>));
     });
+  }
+
+  private vacias(): Record<ClaveVocabulario, Fila> {
+    return Object.fromEntries(VOCAB_CLAVES.map(k => [k, { singular: '', plural: '' }])) as Record<ClaveVocabulario, Fila>;
   }
 
   set(k: ClaveVocabulario, campo: keyof Fila, v: string): void {

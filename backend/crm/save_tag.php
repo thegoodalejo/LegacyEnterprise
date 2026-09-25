@@ -1,6 +1,6 @@
 <?php
 // Crea o edita una etiqueta de la empresa (L4+). Se desactivan, no se borran: en los contactos que ya la tienen se conserva.
-// POST: id (0 = nueva), nombre, color (#RRGGBB), id_grupo (opcional), aplica_a (persona|organizacion, vacío = ambos), orden, activo.
+// POST: id (0 = nueva), nombre, color (#RRGGBB), id_grupo (opcional), aplica_a (persona|organizacion|oportunidad, vacío = todos), orden, activo.
 require_once '../db_connection.php';
 require_once '../cors.php';
 require_once '../auth.php';
@@ -14,7 +14,7 @@ $nombre = crmClean($_POST['nombre'] ?? null, 50, 'Nombre', true);
 $color = hexColorOrNull($_POST['color'] ?? '') ?? '#607D8B';
 $idGrupo = (int)($_POST['id_grupo'] ?? 0) ?: null;
 $aplicaA = (string)($_POST['aplica_a'] ?? '');
-if ($aplicaA !== '' && !in_array($aplicaA, CRM_TIPOS, true)) authFail(400, 'aplica_a inválido');
+if ($aplicaA !== '' && !in_array($aplicaA, CRM_APLICA_A, true)) authFail(400, 'aplica_a inválido');
 $aplicaA = $aplicaA !== '' ? $aplicaA : null;
 $orden = max(-32000, min(32000, (int)($_POST['orden'] ?? 0)));
 $activo = isset($_POST['activo']) ? (($_POST['activo'] === '1') ? 1 : 0) : 1;

@@ -23,13 +23,13 @@ $conn->begin_transaction();
 
 if ($id === 0) {
     $aplicaA = (string)($_POST['aplica_a'] ?? '');
-    if (!in_array($aplicaA, CRM_TIPOS, true)) authFail(400, 'aplica_a inválido');
+    if (!in_array($aplicaA, CRM_APLICA_A, true)) authFail(400, 'aplica_a inválido');
     $clave = crmClean($_POST['clave'] ?? null, 50, 'Clave') ?? $etiqueta;
     $clave = trim(preg_replace('/[^a-z0-9]+/', '_', strtr(mb_strtolower($clave), ['á' => 'a', 'é' => 'e', 'í' => 'i', 'ó' => 'o', 'ú' => 'u', 'ü' => 'u', 'ñ' => 'n'])), '_');
     $clave = mb_substr($clave, 0, 50);
     if ($clave === '') authFail(400, 'La clave no puede quedar vacía');
     if (crmRow($conn, 'SELECT 1 AS ok FROM crm_campos_personalizados WHERE id_empresa = ? AND aplica_a = ? AND clave = ? LIMIT 1', 'iss', [$ctx['id_empresa'], $aplicaA, $clave])) {
-        authFail(409, 'Ya existe un campo con esa clave para ese tipo de contacto');
+        authFail(409, 'Ya existe un campo con esa clave para ese destino');
     }
     crmExec($conn,
         'INSERT INTO crm_campos_personalizados (id_empresa, aplica_a, clave, etiqueta, tipo_dato, obligatorio, orden, activo, created_by, updated_by)
@@ -40,7 +40,7 @@ if ($id === 0) {
 } else {
     $c = crmRow($conn, 'SELECT id, clave, tipo_dato FROM crm_campos_personalizados WHERE id = ? AND id_empresa = ? LIMIT 1', 'ii', [$id, $ctx['id_empresa']]);
     if (!$c) authFail(404, 'Campo no encontrado');
-    if ($c['tipo_dato'] !== $tipoDato && crmRow($conn, 'SELECT 1 AS ok FROM crm_campos_valores WHERE id_campo = ? LIMIT 1', 'i', [$id])) {
+    if ($c['tipo_dato'] !== $tipoDato && crmRow($conn, 'SELECT 1 AS ok FROM crm_campos_valores WHERE id_campo = ? UNION ALL SELECT 1 FROM crm_oportunidad_valores WHERE id_campo = ? LIMIT 1', 'ii', [$id, $id])) {
         authFail(409, 'El tipo no se puede cambiar porque ya hay valores guardados. Desactiva este campo y crea otro.');
     }
     crmExec($conn,

@@ -1,6 +1,6 @@
 <?php
 // Aplica una plantilla de nicho a la empresa de la sesión (L4+; L5 la aplica a la empresa de la sede en la que está parado).
-// Solo AGREGA lo que falta: no pisa vocabulario ya personalizado ni toca roles, campos o etiquetas existentes (por nombre/clave).
+// Solo AGREGA lo que falta: no pisa vocabulario ya personalizado ni toca roles, campos, etiquetas, embudos, etapas, motivos o ítems existentes (por nombre/clave/código).
 // POST: plantilla (id). Devuelve {agregados, existentes} por categoría.
 require_once '../db_connection.php';
 require_once '../cors.php';
@@ -16,7 +16,7 @@ $tpl = crmPlantillas()[$id] ?? null;
 if (!$tpl) authFail(404, 'Plantilla no encontrada');
 
 $res = [];
-foreach (['vocabulario', 'roles', 'campos', 'grupos', 'tags'] as $cat) $res[$cat] = ['agregados' => 0, 'existentes' => 0];
+foreach (['vocabulario', 'roles', 'campos', 'grupos', 'tags', 'etapas', 'motivos', 'items'] as $cat) $res[$cat] = ['agregados' => 0, 'existentes' => 0];
 $cuenta = static function (string $cat, bool $nuevo) use (&$res): void {
     $res[$cat][$nuevo ? 'agregados' : 'existentes']++;
 };
@@ -56,6 +56,33 @@ foreach ($tpl['grupos'] as $nombreGrupo => $tags) {
     foreach ($tags as $i => $t) $nuevaTag($idGrupo, $t, $i + 1);
 }
 foreach ($tpl['tags'] as $i => $t) $nuevaTag(null, $t, $i + 1);
+
+// Embudo con sus etapas (se cuentan las etapas).
+if (!empty($tpl['embudo'])) {
+    crmExec($conn, 'INSERT IGNORE INTO crm_embudos (id_empresa, nombre, orden, created_by, updated_by) VALUES (?, ?, ?, ?, ?)',
+        'isiii', [$e, $tpl['embudo']['nombre'], 1, $u, $u]);
+    $idEmbudo = (int)crmRow($conn, 'SELECT id FROM crm_embudos WHERE id_empresa = ? AND nombre = ?', 'is', [$e, $tpl['embudo']['nombre']])['id'];
+    foreach ($tpl['embudo']['etapas'] as $i => [$nombre, $prob, $tipo, $color]) {
+        $n = crmExec($conn, 'INSERT IGNORE INTO crm_etapas (id_empresa, id_embudo, nombre, orden, probabilidad, tipo, color, created_by, updated_by) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)',
+            'iisiissii', [$e, $idEmbudo, $nombre, $i + 1, $prob, $tipo, $color, $u, $u]);
+        $cuenta('etapas', $n > 0);
+    }
+}
+foreach ($tpl['motivos'] ?? [] as $i => [$tipo, $nombre]) {
+    $n = crmExec($conn, 'INSERT IGNORE INTO crm_motivos_cierre (id_empresa, tipo, nombre, orden, created_by, updated_by) VALUES (?, ?, ?, ?, ?, ?)',
+        'issiii', [$e, $tipo, $nombre, $i + 1, $u, $u]);
+    $cuenta('motivos', $n > 0);
+}
+// Catálogo de ejemplo (se cuentan los ítems; las categorías se crean si faltan).
+foreach ($tpl['catalogo']['categorias'] ?? [] as $i => $nombre) {
+    crmExec($conn, 'INSERT IGNORE INTO crm_catalogo_categorias (id_empresa, nombre, orden, created_by, updated_by) VALUES (?, ?, ?, ?, ?)', 'isiii', [$e, $nombre, $i + 1, $u, $u]);
+}
+foreach ($tpl['catalogo']['items'] ?? [] as [$codigo, $nombre, $categoria, $unidad, $precio]) {
+    $idCat = $categoria !== null ? (int)crmRow($conn, 'SELECT id FROM crm_catalogo_categorias WHERE id_empresa = ? AND nombre = ?', 'is', [$e, $categoria])['id'] : null;
+    $n = crmExec($conn, 'INSERT IGNORE INTO crm_catalogo_items (id_empresa, id_categoria, codigo, nombre, unidad, precio_ref, created_by, updated_by) VALUES (?, ?, ?, ?, ?, ?, ?, ?)',
+        'iisssdii', [$e, $idCat, $codigo, $nombre, $unidad, $precio, $u, $u]);
+    $cuenta('items', $n > 0);
+}
 
 auditAdmin($conn, 'crm_aplicar_plantilla', ['plantilla' => $id, 'id_empresa' => $e, 'resultado' => $res]);
 $conn->commit();

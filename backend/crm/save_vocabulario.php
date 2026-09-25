@@ -1,6 +1,6 @@
 <?php
 // Guarda el vocabulario de la empresa (L4+).
-// POST: vocabulario (JSON {contacto|persona|organizacion: {singular, plural}}). Singular y plural vacíos = volver al nombre
+// POST: vocabulario (JSON {contacto|persona|organizacion|oportunidad|item: {singular, plural}}). Singular y plural vacíos = volver al nombre
 // por defecto (se borra la fila); solo uno de los dos = 400. Solo se tocan las claves que vengan en el envío.
 require_once '../db_connection.php';
 require_once '../cors.php';
@@ -22,7 +22,7 @@ $limpiar = static function (mixed $v, string $label): ?string {
 
 $conn = conectar();
 $conn->begin_transaction();
-foreach (['contacto', 'persona', 'organizacion'] as $clave) {
+foreach (CRM_VOCAB_CLAVES as $clave) {
     if (!array_key_exists($clave, $voc)) continue;
     $item = is_array($voc[$clave]) ? $voc[$clave] : [];
     $sing = $limpiar($item['singular'] ?? null, "Singular de $clave");

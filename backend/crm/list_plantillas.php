@@ -18,6 +18,9 @@ foreach (crmPlantillas() as $id => $t) {
         'campos' => array_map(static fn($c) => ['aplica_a' => $c[0], 'etiqueta' => $c[2], 'tipo_dato' => $c[3]], $t['campos']),
         'grupos' => array_map(static fn($nombre, $tags) => ['nombre' => $nombre, 'tags' => array_column($tags, 0)], array_keys($t['grupos']), array_values($t['grupos'])),
         'tags' => array_column($t['tags'], 0),
+        'embudo' => isset($t['embudo']) ? ['nombre' => $t['embudo']['nombre'], 'etapas' => array_column($t['embudo']['etapas'], 0)] : null,
+        'motivos' => array_column($t['motivos'] ?? [], 1),
+        'items' => array_column($t['catalogo']['items'] ?? [], 1),
     ];
 }
 
