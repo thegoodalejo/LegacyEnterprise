@@ -18,9 +18,9 @@ Código en GitHub (`dev`, `qa`, `pdn`; repo **público**: no subir secretos ni d
 
 ## Cierre: lo que queda
 
-1. **Login en producción:** entrar con Google en https://legacyenterprise.web.app y avisar para marcarte L5 en la BD de
-   PDN (misma consulta del paso 4, contra `legacyenterprise_db_prod`). Opcional: instalar la PWA y activar notificaciones
-   para una push de prueba.
+1. ~~**Login en producción y L5**~~ ✅ 2026-09-24: `legacysoftware.co@gmail.com` (id 1) marcado L5 en PDN, auditado en
+   `le_H_admin` (`grant_platform_admin`). Llega a QA con la próxima copia saneada (push a `qa`).
+   Opcional: instalar la PWA y activar notificaciones para una push de prueba.
 2. **Borrar el usuario temporal de NPM** `claudecode@…` (túnel `ssh -L 8181:127.0.0.1:81 legacy-vps` → Users).
 3. **Borrar llaves ya cargadas:** `Descargas\legacyenterprise-731cb-firebase-adminsdk-*.json`,
    `Descargas\legacyenterprise-731cb-df5113a01503.json` y `C:\Users\Alejo\r2-prod.env`
@@ -152,6 +152,17 @@ Crear la rama `pdn` (solo con tu OK) → despliega backend + frontend a **`https
 `npm run start:local` sirve el frontend contra un backend en `http://127.0.0.1:8080`
 (`php -S 127.0.0.1:8080 -t backend` con `mysqli` + MariaDB 10.11 local y las variables `DB_*`, `DB_PORT`, `APP_ENV=qa`,
 `FIREBASE_PROJECT_ID`). Con QA en la VPS, lo normal es `npm start` (apunta a QA).
+
+Receta sin Docker en Windows (usada para probar el CRM v0; todo en una carpeta temporal, sin instalar nada):
+1. MariaDB portable: `https://archive.mariadb.org/mariadb-10.11.14/winx64-packages/mariadb-10.11.14-winx64.zip` →
+   `bin\mariadb-install-db.exe --datadir=<dir>\data --password=…` → `bin\mariadbd.exe --defaults-file=<dir>\data\my.ini --port=3307`.
+2. Crear la BD `legacyenterprise` (`utf8mb4_unicode_ci`) y un usuario; aplicar `database/migrations/*.sql` en orden y, para
+   tener datos y usuarios de prueba, `database/dev-seed-crm.sql` (**solo local**).
+3. Backend: `php -d extension_dir=F:/PHP/ext -d extension=mysqli -S 127.0.0.1:8080 -t backend` con `DB_HOST=127.0.0.1`,
+   `DB_PORT=3307`, `DB_USER`, `DB_PASSWORD`, `DB_NAME`, `APP_ENV=qa`.
+4. Frontend: `npm run start:local`. CORS solo admite `http://localhost:4200`: si ya hay un `npm start` ahí (apunta a QA),
+   pararlo, o probar con Chromium sin seguridad web (`--disable-web-security`).
+5. Login de prueba (solo en dev): `window.__leDev.login('dev-token-l4')` desde la consola del navegador y `__leDev.go('/m/crm')`.
 
 ## Hallazgos fuera de este proyecto
 - **LegacyInSite (producción)** sirve `ngsw-worker.js`, `index.html` y `manifest.webmanifest` con `cache-control: max-age=3600`

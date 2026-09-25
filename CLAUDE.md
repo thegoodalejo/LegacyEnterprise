@@ -26,8 +26,10 @@ Detalle y **acciones pendientes del dueño** (comandos exactos): [docs/pendiente
 | 5. CI/CD | ✅ `dev`/`qa`/`pdn` con deploy automático; copia PDN → QA probada en CI |
 | 6. Hosting + PWA | ✅ publicado por CI, `no-cache` verificado, bundle apunta solo a la API de PDN |
 
-Cierre pendiente del dueño (login en PDN para marcarlo L5, limpieza de llaves): [docs/pendientes.md](docs/pendientes.md).
-El siguiente trabajo ya es de producto (módulos: CRM, Agenda, …).
+Cierre pendiente del dueño (limpieza de llaves y del usuario temporal de NPM): [docs/pendientes.md](docs/pendientes.md).
+El siguiente trabajo ya es de producto (módulos: CRM, Agenda, …). **CRM v1 de contactos** (Persona/Organización con jerarquía y roles,
+campos personalizados, etiquetas, historial, filtros, acciones en lote, vocabulario por empresa y plantillas por nicho):
+definición, decisiones y pendientes en [docs/modulos/crm.md](docs/modulos/crm.md).
 
 ## Gitflow
 
@@ -57,7 +59,9 @@ El siguiente trabajo ya es de producto (módulos: CRM, Agenda, …).
   el mismo algoritmo (`@material/material-color-utilities`) y cambia el logo de barra, loader y splash.
 - **Módulos:** catálogo en `src/app/modules/app-modules.ts` (código, ícono, tono, navegación). El app switcher recibe la
   lista ya filtrada (habilitados en la sede ∩ permitidos al usuario); no decide acceso.
-- **i18n:** `public/i18n/{es,en}.json`, `'clave' | translate`.
+- **i18n:** `public/i18n/{es,en}.json`, `'clave' | translate`. `TranslationService.setGlobals()` publica variables para todos los
+  textos (el CRM las usa para el vocabulario de la empresa: `{persona}`, `{Personas}`…): esos textos se redactan sin artículos ni
+  adjetivos que dependan del género.
 - **Íconos:** Material Symbols Outlined (fuente por defecto de `mat-icon`). Íconos PWA: `node scripts/generate-icons.mjs`
   desde `docs/brand/`.
 - `/dev/ui` (solo en desarrollo): muestrario de la base visual y probador de marca blanca.
@@ -71,12 +75,21 @@ El siguiente trabajo ya es de producto (módulos: CRM, Agenda, …).
 - Módulos: catálogo `le_modulos` + contrato `le_sede_modulos` (vigencia por fechas). L4 ve todos los contratados; L0–L3 por
   privilegio con el código del módulo. Mantener `MODULES`/`PRIVILEGES` iguales en `auth.php` y `session.service.ts`.
 - `db_prepare_or_fail()` y `db_execute_or_fail()`: un fallo de BD siempre responde JSON, nunca HTML.
+- **Auditoría de tablas nuevas:** `created_at`/`updated_at` + `created_by`/`updated_by` (FK a `le_usuarios`, `ON DELETE SET NULL`).
+  Historial de un registro de negocio: `auditRegistro()` / `auditRegistroVarios()` (`_lib/_historial.php`) → `le_H_registros`
+  (genérica, para todos los módulos); `auditAdmin()` sigue siendo solo para acciones sensibles de plataforma.
+- Módulo con datos personales: enmascarar en `database/qa-sanitize.sql` (tolerando tablas que aún no existan en PDN).
+- Eliminación de registros de negocio: lógica (`activo = 0`) y restaurable, no `DELETE`.
 
 ## Gotchas
 
 - `@material/material-color-utilities` 0.4 usa imports sin extensión: en Node falla, por eso `npm run theme` empaqueta con esbuild.
 - En esta máquina (Windows PowerShell 5.1) no editar archivos UTF-8 con `Get-Content -Raw`/`Set-Content`: los lee como ANSI y los rompe.
 - `inject()` siempre antes del primer `await` en guards/funciones (NG0203).
+- Un `effect()` que llama a algo con `LoadingService.wrap()` va con `untracked(...)`: `wrap` lee sus propias señales y el efecto
+  se re-dispara con cada carga de otra pantalla (bucle de recargas y overlay siempre visible).
+- Local en Windows: MariaDB baja a minúsculas los nombres de tabla (`le_H_admin` → `le_h_admin`); en la VPS (Linux) no.
+  Escribir siempre `le_H_…` con esa mayúscula. El `php.ini` local trae `mysqli` apagado: `php -d extension_dir=… -d extension=mysqli -S …`.
 - Conexión MariaDB con `SET NAMES utf8mb4 COLLATE utf8mb4_unicode_ci`: si no, `? = ''` falla con "Illegal mix of collations".
 - `firebase/messaging` solo por `import()` dinámico: estático infla el bundle inicial ~100 kB.
 - `window.__leDev` (login con token de prueba) existe solo en desarrollo: `ngDevMode` lo elimina del build de producción.
