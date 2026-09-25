@@ -9,4 +9,32 @@
 --   UPDATE le_campaigns SET estado = 'pausada' WHERE estado IN ('encolada','enviando','esperando_cupo');
 --   UPDATE le_inbound_queue SET estado = 'fallido', error_detalle = 'QA: copia de PDN' WHERE estado IN ('pendiente','procesando');
 --
--- Sin nada propio que sanear todavía: dejar el archivo con solo comentarios (o no crearlo).
+-- Cada módulo agrega aquí su bloque (tolerante a tablas que aún no existan en PDN).
+
+-- ─── CRM (migración 004): datos personales de contactos ─────────────────────────────────────────────────────────
+-- QA es una copia de PDN: ningún correo, WhatsApp ni teléfono real debe sobrevivir (una prueba de envío llegaría a un
+-- cliente de verdad). Se conservan nombres y documentos (sirven para probar búsquedas). Tolera que las tablas aún no
+-- existan (primer deploy: PDN todavía no tiene la migración 004) y es idempotente.
+DROP PROCEDURE IF EXISTS le_qa_sanitize_crm;
+DELIMITER //
+CREATE PROCEDURE le_qa_sanitize_crm()
+BEGIN
+  IF (SELECT COUNT(*) FROM information_schema.tables WHERE table_schema = DATABASE() AND table_name = 'crm_contactos') > 0 THEN
+    UPDATE crm_contactos_personas
+       SET correo = IF(correo IS NULL, NULL, CONCAT('persona', id, '@qa.invalid')),
+           whatsapp_numero = IF(whatsapp_numero IS NULL, NULL, CONCAT('5550', LPAD(id, 6, '0')));
+    UPDATE crm_contactos_organizaciones
+       SET correo_facturacion = IF(correo_facturacion IS NULL, NULL, CONCAT('facturacion', id, '@qa.invalid'));
+    UPDATE crm_contactos
+       SET telefono = IF(telefono IS NULL, NULL, CONCAT('555', LPAD(id, 7, '0')));
+    -- `busqueda` guarda copia de esos datos (para el buscador): se rearma con los ya enmascarados.
+    UPDATE crm_contactos c
+      LEFT JOIN crm_contactos_personas p ON p.id = c.id
+      LEFT JOIN crm_contactos_organizaciones o ON o.id = c.id
+       SET c.busqueda = LEFT(CONCAT_WS(' ', c.nombre_completo, COALESCE(p.correo, o.correo_facturacion), c.telefono,
+                                       COALESCE(p.documento_numero, o.documento_numero), p.whatsapp_numero), 1000);
+  END IF;
+END//
+DELIMITER ;
+CALL le_qa_sanitize_crm();
+DROP PROCEDURE le_qa_sanitize_crm;
