@@ -7,7 +7,7 @@ import { MatTooltip } from '@angular/material/tooltip';
 import { TagChipComponent } from '../../components/tag-chip.component';
 import { TagPickerDialogComponent, TagPickerResult } from '../../components/tag-picker-dialog.component';
 import { CrmConfigService } from '../../services/crm-config.service';
-import { CampoConValor, ContactoDetalle, CrmService, OportunidadFila } from '../../services/crm.service';
+import { CampoConValor, ContactoDetalle, CrmService, OportunidadFila, ResumenVentas, VentaFila } from '../../services/crm.service';
 import { DialogService, dialogSize } from '../../services/dialog.service';
 import { LoadingService } from '../../services/loading.service';
 import { SessionService } from '../../services/session.service';
@@ -16,6 +16,8 @@ import { ContactoDialogComponent, ContactoDialogResult } from './contacto-dialog
 import { formatCoords, formatDateTime, initials, isoToDmy, mapsUrl } from './crm-format';
 import { HistorialDialogComponent } from './historial-dialog.component';
 import { abrirOportunidadDialog } from './oportunidad-dialog.component';
+import { VentaDialogComponent } from './venta-dialog.component';
+import { rangoPeriodo } from './ventas.page';
 
 /** Perfil de un Persona u Organización: datos, vínculos, etiquetas, campos personalizados, auditoría e historial. */
 @Component({
@@ -135,6 +137,24 @@ import { abrirOportunidadDialog } from './oportunidad-dialog.component';
             @if (oppsTotal() > opps().length) { <a mat-button routerLink="/m/crm/oportunidades" class="more-opps">{{ 'crm.opp.see_all' | translate: { n: oppsTotal() } }}</a> }
           </section>
 
+          @if (ventasRes(); as vr) {
+            <section class="card" id="profile-sales">
+              <h2>{{ 'crm.sales.profile_title' | translate }}</h2>
+              @if (vr.ventas) {
+                <dl class="sales-k">
+                  <div><dt>{{ 'crm.sales.k_total' | translate }}</dt><dd><strong>{{ cfg.money(vr.total) }}</strong></dd></div>
+                  <div><dt>{{ 'crm.sales.k_sales' | translate }}</dt><dd>{{ vr.ventas }}</dd></div>
+                  <div><dt>{{ 'crm.sales.last' | translate }}</dt><dd>{{ vr.hasta ? fmt(vr.hasta) : '—' }}</dd></div>
+                </dl>
+                @for (v of ultimasVentas(); track v.id) {
+                  <button class="link-row sale" (click)="verVenta(v)"><mat-icon>receipt_long</mat-icon>
+                    <span class="link-text"><strong>{{ cfg.money(v.total) }}</strong><span class="muted small">{{ fmt(v.fecha) }} · {{ v.documento || '—' }}@if (v.id_contacto !== det.contacto.id) { · {{ v.cliente }} }</span></span></button>
+                }
+                @if (det.hijas.length) { <span class="muted small">{{ 'crm.sales.profile_children' | translate }}</span> }
+              } @else { <p class="muted">{{ 'crm.sales.profile_empty' | translate }}</p> }
+            </section>
+          }
+
           @if (det.campos.length) {
             <section class="card">
               <h2>{{ 'crm.form.custom' | translate }}</h2>
@@ -185,6 +205,8 @@ import { abrirOportunidadDialog } from './oportunidad-dialog.component';
     .inline-link { color: var(--md-sys-color-primary); }
     .audit { display: flex; flex-wrap: wrap; gap: 4px 24px; margin-top: 20px; }
     .more-opps { align-self: flex-start; }
+    .sales-k { flex-direction: row; flex-wrap: wrap; gap: 8px 24px; margin-bottom: 8px; }
+    .sale { width: 100%; border: none; background: none; cursor: pointer; text-align: left; font: inherit; }
   `,
 })
 export default class ContactoPerfilPage {
@@ -201,6 +223,8 @@ export default class ContactoPerfilPage {
 
   readonly d = signal<ContactoDetalle | null>(null);
   readonly opps = signal<OportunidadFila[]>([]);
+  readonly ventasRes = signal<ResumenVentas | null>(null);
+  readonly ultimasVentas = signal<VentaFila[]>([]);
   readonly oppsTotal = signal(0);
   readonly notFound = signal(false);
   readonly canAudit = computed(() => this.session.hasMinRole('L2'));
@@ -222,7 +246,7 @@ export default class ContactoPerfilPage {
   async load(id = Number(this.id())): Promise<void> {
     this.notFound.set(false);
     const r = await this.loading.wrap(() => this.crm.getContacto(id));
-    if (r.action && r.data) { this.d.set(r.data); void this.loadOpps(id); }
+    if (r.action && r.data) { this.d.set(r.data); void this.loadOpps(id); void this.loadVentas(id, r.data.hijas.length > 0); }
     else { this.d.set(null); this.notFound.set(true); }
   }
 
@@ -233,6 +257,16 @@ export default class ContactoPerfilPage {
       if (r.action && r.data) { this.opps.set(r.data.oportunidades); this.oppsTotal.set(r.data.total); }
     } catch { /* la tarjeta queda vacía: no impide ver el perfil */ }
   }
+
+  /** Ventas de los últimos 12 meses (una organización suma las de sus dependientes). */
+  private async loadVentas(id: number, conHijas: boolean): Promise<void> {
+    try {
+      const r = await this.crm.listVentas({ contacto: id, dependientes: conHijas, desde: rangoPeriodo('12m').desde ?? undefined }, 1, 3, 'fecha', 'desc');
+      if (r.action && r.data) { this.ventasRes.set(r.data.resumen); this.ultimasVentas.set(r.data.ventas); }
+    } catch { /* la tarjeta no aparece: no impide ver el perfil */ }
+  }
+
+  verVenta(v: VentaFila): void { this.matDialog.open(VentaDialogComponent, { ...dialogSize('720px'), data: v.id }); }
 
   newOpp(): void {
     const c = this.d()?.contacto;

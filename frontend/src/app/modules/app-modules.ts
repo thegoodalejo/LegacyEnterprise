@@ -31,6 +31,7 @@ export const APP_MODULES: readonly AppModule[] = [
     nav: [
       { path: '/m/crm/contactos', icon: 'contacts', label: 'nav.crm.contactos' },
       { path: '/m/crm/oportunidades', icon: 'trending_up', label: 'nav.crm.oportunidades' },
+      { path: '/m/crm/ventas', icon: 'point_of_sale', label: 'nav.crm.ventas' },
       { path: '/m/crm/configuracion', icon: 'tune', label: 'nav.crm.configuracion', rule: { minRole: 'L4' } },
     ],
   },

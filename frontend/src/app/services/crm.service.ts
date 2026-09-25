@@ -173,6 +173,46 @@ export interface PaginaExportOportunidades {
   total: number; pagina: number; por_pagina: number; config: ConfigCrm;
 }
 
+// ─── Ventas importadas ────────────────────────────────────────────────────────────────────────────────────────────
+export interface FiltrosVenta {
+  desde?: string; hasta?: string; contacto?: number; dependientes?: boolean; q?: string; item?: number; categoria?: number; importacion?: number;
+  estado?: 'activas' | 'inactivas' | 'todas';
+}
+export interface ResumenVentas { ventas: number; total: number; unidades: number; clientes: number; ticket_promedio: number; desde: string | null; hasta: string | null }
+export interface VentaFila {
+  id: number; fecha: string; documento: string | null; total: number; unidades: number; activo: boolean; id_importacion: number | null;
+  id_contacto: number; cliente: string; cliente_tipo: TipoContacto; lineas: number;
+}
+export interface GrupoCliente { id: number; nombre: string; tipo: TipoContacto; ventas: number; total: number; unidades: number; ultima: string }
+export interface GrupoItem { id_item: number | null; codigo: string | null; nombre: string | null; categoria: string | null; unidad: string | null; cantidad: number; total: number; ventas: number }
+export interface GrupoCategoria { id_categoria: number | null; nombre: string; cantidad: number; total: number; ventas: number }
+export interface GrupoMes { mes: string; ventas: number; total: number; unidades: number; clientes: number }
+export type VistaVentas = 'lista' | 'clientes' | 'items' | 'categorias' | 'meses';
+export interface ListaVentas { ventas: VentaFila[]; total: number; pagina: number; por_pagina: number; resumen: ResumenVentas }
+export interface GruposVentas<T> { grupos: T[]; total: number; pagina: number; por_pagina: number; resumen: ResumenVentas }
+export interface VentaDetalle {
+  venta: { id: number; fecha: string; documento: string | null; total: number; unidades: number; activo: boolean; id_importacion: number | null; id_contacto: number;
+    created_at: string; cliente: string; cliente_tipo: TipoContacto; archivo: string | null; creado_por: string | null };
+  lineas: { id: number; id_item: number | null; codigo: string | null; nombre: string | null; unidad: string | null; categoria: string | null; cantidad: number; precio_unitario: number; total: number }[];
+}
+export interface Importacion {
+  id: number; archivo: string | null; estado: 'procesando' | 'completa' | 'revertida'; filas_total: number; filas_ok: number; filas_error: number;
+  ventas_nuevas: number; ventas_reemplazadas: number; ventas_omitidas: number; items_creados: number; total_valor: number;
+  fecha_desde: string | null; fecha_hasta: string | null; errores: { fila: number; motivo: string }[]; created_at: string; revertido_at: string | null;
+  creado_por: string | null; revertido_por: string | null;
+}
+export interface OpcionesImport { identificar: 'documento' | 'nombre' | 'campo'; id_campo?: number | null; items_nuevos: 'crear' | 'sin_item'; duplicados: 'omitir' | 'reemplazar' }
+export interface ResultadoBloque {
+  filas_ok: number; filas_error: number; ventas_nuevas: number; ventas_reemplazadas: number; ventas_omitidas: number; items_creados: number; total_valor: number;
+  fecha_desde: string | null; fecha_hasta: string | null; errores: { fila: number; motivo: string }[]; clientes_no_encontrados: string[];
+}
+export interface PlantillaImport { id: number; nombre: string; mapeo: Record<string, unknown>; updated_at: string }
+export interface PaginaExportVentas {
+  ventas: (Omit<VentaFila, 'lineas' | 'id_importacion'> & { cliente_documento: string | null; lote: string | null })[];
+  lineas: { id_venta: number; codigo: string | null; nombre: string | null; categoria: string | null; unidad: string | null; cantidad: number; precio_unitario: number; total: number }[];
+  total: number; pagina: number; por_pagina: number; resumen: ResumenVentas; config: ConfigCrm;
+}
+
 /** Llamadas del módulo CRM. Cada método devuelve la respuesta cruda del backend ({action, mensaje, data}). */
 @Injectable({ providedIn: 'root' })
 export class CrmService {
@@ -280,4 +320,31 @@ export class CrmService {
   }
   listNotas(idOportunidad: number): Promise<ApiResponse<{ notas: NotaOp[]; total: number }>> { return this.api.post('crm/list_notas.php', { id_oportunidad: idOportunidad }); }
   saveNota(data: Record<string, unknown>): Promise<ApiResponse<{ id: number }>> { return this.api.post('crm/save_nota.php', data); }
+
+  // ─── Ventas importadas ──────────────────────────────────────────────────────────────────────────────────────────
+  listVentas(filtros: FiltrosVenta, pagina = 1, porPagina = 25, orden = 'fecha', dir: 'asc' | 'desc' = 'desc'): Promise<ApiResponse<ListaVentas>> {
+    return this.api.post('crm/list_ventas.php', { vista: 'lista', filtros, pagina, por_pagina: porPagina, orden, dir });
+  }
+  gruposVentas<T>(vista: Exclude<VistaVentas, 'lista'>, filtros: FiltrosVenta, pagina = 1, porPagina = 25): Promise<ApiResponse<GruposVentas<T>>> {
+    return this.api.post('crm/list_ventas.php', { vista, filtros, pagina, por_pagina: porPagina });
+  }
+  getVenta(id: number): Promise<ApiResponse<VentaDetalle>> { return this.api.post('crm/get_venta.php', { id }); }
+  importarVentas(accion: 'simular' | 'bloque', ventas: unknown[], opciones: OpcionesImport, idImportacion?: number): Promise<ApiResponse<ResultadoBloque>> {
+    return this.api.post('crm/import_ventas.php', { accion, ventas, opciones, id_importacion: idImportacion });
+  }
+  iniciarImportacion(archivo: string, filasTotal: number, opciones: OpcionesImport, mapeo: unknown): Promise<ApiResponse<{ id: number }>> {
+    return this.api.post('crm/import_ventas.php', { accion: 'iniciar', archivo, filas_total: filasTotal, opciones, mapeo });
+  }
+  finalizarImportacion(id: number): Promise<ApiResponse<{ id: number }>> { return this.api.post('crm/import_ventas.php', { accion: 'finalizar', id_importacion: id }); }
+  listImportaciones(pagina = 1, porPagina = 25): Promise<ApiResponse<{ importaciones: Importacion[]; total: number }>> {
+    return this.api.post('crm/list_importaciones.php', { pagina, por_pagina: porPagina });
+  }
+  revertirImportacion(id: number): Promise<ApiResponse<{ ventas_desactivadas: number }>> { return this.api.post('crm/revertir_importacion.php', { id_importacion: id }); }
+  listImportPlantillas(): Promise<ApiResponse<{ plantillas: PlantillaImport[] }>> { return this.api.post('crm/list_import_plantillas.php'); }
+  saveImportPlantilla(nombre: string, mapeo: unknown, activo = true): Promise<ApiResponse<{ nombre: string }>> {
+    return this.api.post('crm/save_import_plantilla.php', { nombre, mapeo: activo ? mapeo : undefined, activo: activo ? 1 : 0 });
+  }
+  exportVentas(filtros: FiltrosVenta, pagina: number, porPagina: number, formato: 'pdf' | 'xlsx', totalEsperado?: number): Promise<ApiResponse<PaginaExportVentas>> {
+    return this.api.post('crm/export_ventas.php', { filtros, pagina, por_pagina: porPagina, formato, total_esperado: totalEsperado });
+  }
 }
