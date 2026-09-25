@@ -26,8 +26,7 @@ import { SessionService } from '../../services/session.service';
 import { TranslatePipe, TranslationService } from '../../services/translation.service';
 import { formatDate, formatDateTime } from './crm-format';
 import { TranslatedPaginatorIntl } from './translated-paginator-intl';
-import { VentaDialogComponent } from './venta-dialog.component';
-import { abrirVentaManualDialog } from './venta-manual-dialog.component';
+import { VentasUiService } from './venta-manual-dialog.component';
 import { VentasImportDialogComponent } from './ventas-import-dialog.component';
 
 type Periodo = 'mes' | 'mes_ant' | 'trimestre' | 'anio' | '12m' | 'todo' | 'rango';
@@ -277,6 +276,7 @@ export default class VentasPage {
   readonly i18n = inject(TranslationService);
   readonly cfg = inject(CrmConfigService);
   private reportes = inject(CrmVentasReportService);
+  private ventasUi = inject(VentasUiService);
 
   readonly periodos: Periodo[] = ['mes', 'mes_ant', 'trimestre', 'anio', '12m', 'todo', 'rango'];
   readonly estados: EstadoVentas[] = ['activas', 'inactivas', 'todas'];
@@ -388,9 +388,7 @@ export default class VentasPage {
 
   verCliente(g: GrupoCliente): void { void this.router.navigate(['/m/crm/contactos', g.id]); }
   verItem(g: GrupoItem): void { if (g.id_item) { this.item.set({ id: g.id_item, nombre: g.nombre ?? '' }); this.tab.set('ventas'); } }
-  verVenta(v: VentaFila): void {
-    this.matDialog.open(VentaDialogComponent, { ...dialogSize('720px'), data: v.id }).afterClosed().subscribe(cambio => { if (cambio) void this.load(); });
-  }
+  verVenta(v: VentaFila): void { void this.ventasUi.ver(v.id).then(cambio => { if (cambio) void this.load(); }); }
   verLote(i: Importacion): void { this.importacion.set({ id: i.id, archivo: i.archivo }); this.setPeriodo('todo'); this.tab.set('ventas'); }
 
   async verErrores(i: Importacion): Promise<void> {
@@ -406,11 +404,9 @@ export default class VentasPage {
 
   /** Carrito de venta manual; al registrarla se ve en la pestaña Ventas. */
   nuevaVenta(): void {
-    abrirVentaManualDialog(this.matDialog).afterClosed().subscribe(async r => {
-      if (!r) return;
+    void this.ventasUi.registrar({}, () => {
       if (this.tab() === 'ventas') void this.load();
       else this.tab.set('ventas');   // el cambio de pestaña ya recarga
-      await this.dialogs.success({ title: this.i18n.t('crm.cart.saved'), message: this.i18n.t('crm.cart.saved_msg', { total: this.cfg.money(r.total), client: r.cliente }) });
     });
   }
 

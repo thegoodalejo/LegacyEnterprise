@@ -1,5 +1,6 @@
 <?php
-// Detalle de una venta: cliente, documento, fecha, líneas, el lote de donde vino (NULL = registrada a mano) y su historial
+// Detalle de una venta: cliente, documento, fecha, líneas, el lote de donde vino (NULL = registrada a mano), la oportunidad de la que se registró
+// (id_oportunidad, oportunidad_titulo) y su historial
 // (creación manual, anulación con motivo, restauración, reemplazo por una importación). POST: id.
 require_once '../db_connection.php';
 require_once '../cors.php';
@@ -11,10 +12,11 @@ $id = (int)($_POST['id'] ?? 0);
 
 $conn = conectar();
 $v = crmRow($conn,
-    'SELECT v.id, v.fecha, v.documento, v.total, v.unidades, v.activo, v.id_importacion, v.id_contacto, v.created_at,
-            c.nombre_completo AS cliente, c.tipo AS cliente_tipo, i.archivo, COALESCE(u.nombre, u.email) AS creado_por
+    'SELECT v.id, v.fecha, v.documento, v.total, v.unidades, v.activo, v.id_importacion, v.id_oportunidad, v.id_contacto, v.created_at,
+            c.nombre_completo AS cliente, c.tipo AS cliente_tipo, i.archivo, COALESCE(u.nombre, u.email) AS creado_por, op.titulo AS oportunidad_titulo
        FROM crm_ventas v JOIN crm_contactos c ON c.id = v.id_contacto
   LEFT JOIN crm_importaciones i ON i.id = v.id_importacion
+  LEFT JOIN crm_oportunidades op ON op.id = v.id_oportunidad
   LEFT JOIN le_usuarios u ON u.id = v.created_by
       WHERE v.id = ? AND v.id_sede = ? LIMIT 1', 'ii', [$id, $ctx['id_sede']]);
 if (!$v) authFail(404, 'Venta no encontrada');
@@ -33,6 +35,7 @@ $conn->close();
 
 foreach (['id', 'id_contacto'] as $k) $v[$k] = (int)$v[$k];
 $v['id_importacion'] = $v['id_importacion'] !== null ? (int)$v['id_importacion'] : null;
+$v['id_oportunidad'] = $v['id_oportunidad'] !== null ? (int)$v['id_oportunidad'] : null;
 $v['total'] = (float)$v['total']; $v['unidades'] = (float)$v['unidades']; $v['activo'] = (int)$v['activo'] === 1;
 foreach ($lineas as &$l) {
     $l['id'] = (int)$l['id']; $l['id_item'] = $l['id_item'] !== null ? (int)$l['id_item'] : null;

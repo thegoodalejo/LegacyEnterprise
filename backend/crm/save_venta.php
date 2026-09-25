@@ -2,7 +2,8 @@
 // Registra una venta escrita a mano (el «carrito» de la pantalla de ventas o del perfil del cliente). L2+, como importar: las ventas alimentan las metas.
 // Queda con id_importacion NULL (= venta manual): no pertenece a ningún lote; se anula o restaura una por una (anular_venta.php).
 // POST: id_contacto, fecha (AAAA-MM-DD), documento (opcional; no puede repetir el de otra venta activa de la sede),
-//       lineas (JSON [{id_item | descripcion, cantidad, precio_unitario}]), validar (1 = solo revisar: valida todo y no guarda nada).
+//       lineas (JSON [{id_item | descripcion, cantidad, precio_unitario}]), validar (1 = solo revisar: valida todo y no guarda nada),
+//       id_oportunidad (opcional: venta desde una oportunidad ganada; una sola venta activa por oportunidad, mismo cliente).
 // Devuelve {id (0 al validar), total, unidades, lineas}. Reglas: crmVentaManualParsear (_lib/_crm_ventas.php).
 require_once '../db_connection.php';
 require_once '../cors.php';
@@ -15,7 +16,7 @@ $validar = ($_POST['validar'] ?? '0') === '1';
 
 $conn = conectar();
 $conn->begin_transaction();   // cualquier authFail posterior deja la transacción sin confirmar: se revierte sola
-$v = crmVentaManualParsear($conn, $ctx, $_POST, crmJsonParam('lineas'));
+$v = crmVentaManualParsear($conn, $ctx, $_POST, crmJsonParam('lineas'), !$validar);
 if ($validar) {
     $conn->rollback();
     $conn->close();

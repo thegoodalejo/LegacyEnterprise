@@ -18,8 +18,7 @@ import { HistorialDialogComponent } from './historial-dialog.component';
 import { abrirMetaDialog } from './meta-dialog.component';
 import { MetaBarComponent, MetaEstadoComponent, periodoDe, valorMetrica } from './metas-ui';
 import { abrirOportunidadDialog } from './oportunidad-dialog.component';
-import { VentaDialogComponent } from './venta-dialog.component';
-import { abrirVentaManualDialog } from './venta-manual-dialog.component';
+import { VentasUiService } from './venta-manual-dialog.component';
 import { rangoPeriodo } from './ventas.page';
 
 /** Perfil de un Persona u Organización: datos, vínculos, etiquetas, campos personalizados, auditoría e historial. */
@@ -242,6 +241,7 @@ export default class ContactoPerfilPage {
   private crm = inject(CrmService);
   private loading = inject(LoadingService);
   private dialogs = inject(DialogService);
+  private ventasUi = inject(VentasUiService);
   private matDialog = inject(MatDialog);
   private router = inject(Router);
   private session = inject(SessionService);
@@ -325,19 +325,13 @@ export default class ContactoPerfilPage {
     if (c) abrirMetaDialog(this.matDialog, { meta: m }).afterClosed().subscribe(ok => { if (ok) void this.loadMetas(c.id); });
   }
 
-  verVenta(v: VentaFila): void {
-    this.matDialog.open(VentaDialogComponent, { ...dialogSize('720px'), data: v.id }).afterClosed().subscribe(cambio => { if (cambio) this.recargarVentas(); });
-  }
+  verVenta(v: VentaFila): void { void this.ventasUi.ver(v.id).then(cambio => { if (cambio) this.recargarVentas(); }); }
 
   /** Carrito de venta manual con este contacto como cliente; al registrarla se recargan la tarjeta de ventas y las metas (el avance cambia al instante). */
   nuevaVenta(): void {
     const c = this.d()?.contacto;
     if (!c) return;
-    abrirVentaManualDialog(this.matDialog, { contacto: { id: c.id, nombre: c.nombre_completo, tipo: c.tipo } }).afterClosed().subscribe(async r => {
-      if (!r) return;
-      this.recargarVentas();
-      await this.dialogs.success({ title: this.i18n.t('crm.cart.saved'), message: this.i18n.t('crm.cart.saved_msg', { total: this.cfg.money(r.total), client: r.cliente }) });
-    });
+    void this.ventasUi.registrar({ contacto: { id: c.id, nombre: c.nombre_completo, tipo: c.tipo } }, () => this.recargarVentas());
   }
 
   private recargarVentas(): void {

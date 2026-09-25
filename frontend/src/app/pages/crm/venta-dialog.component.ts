@@ -44,6 +44,10 @@ import { formatDate, formatDateTime } from './crm-format';
             </tbody>
           </table>
         </div>
+        @if (det.venta.id_oportunidad) {
+          <p class="small" id="sale-opp"><mat-icon class="mini">trending_up</mat-icon>{{ 'crm.sales.from_opp' | translate }}
+            <a class="link" [routerLink]="['/m/crm/oportunidades', det.venta.id_oportunidad]" (click)="cerrar()">{{ det.venta.oportunidad_titulo }}</a></p>
+        }
         @if (manual()) {
           <p class="muted small" id="sale-origin">{{ 'crm.sales.origin_manual' | translate: { date: fmtDt(det.venta.created_at), user: det.venta.creado_por || '—' } }}</p>
         } @else {
@@ -88,6 +92,7 @@ import { formatDate, formatDateTime } from './crm-format';
     .head { display: flex; flex-wrap: wrap; gap: 12px 32px; margin: 0 0 12px; div { display: flex; flex-direction: column; } dt { font: var(--mat-sys-label-medium); color: var(--md-sys-color-on-surface-variant); } dd { margin: 0; } }
     .t { width: 100%; border-collapse: collapse; th, td { padding: 6px 8px; border-bottom: 1px solid var(--md-sys-color-outline-variant); text-align: left; } .n { text-align: right; white-space: nowrap; } }
     .small { font: var(--mat-sys-body-small); } .link { color: var(--md-sys-color-primary); } .warn { color: var(--md-sys-color-error); }
+    .mini { font-size: 16px; width: 16px; height: 16px; vertical-align: -3px; margin-right: 4px; }
     .hist { margin-top: 8px; h3 { margin: 0 0 4px; font: var(--mat-sys-title-small); color: var(--md-sys-color-on-surface-variant); }
       ol { list-style: none; margin: 0; padding: 0; } li { display: flex; gap: 10px; padding: 6px 0; overflow-wrap: anywhere; } mat-icon { flex: none; color: var(--md-sys-color-primary); } }
     .annul { display: flex; flex-direction: column; gap: 8px; margin-top: 12px; padding: 12px; border-radius: 12px; border: 1px solid var(--md-sys-color-error); p { margin: 0; } }

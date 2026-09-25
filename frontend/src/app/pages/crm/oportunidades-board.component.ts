@@ -14,7 +14,8 @@ export interface MoverEvento { oportunidad: OportunidadFila; etapa: Etapa }
 
 /**
  * Tablero de oportunidades: una columna por etapa del embudo con su conteo y valor, tarjetas que se arrastran de una columna a otra
- * (CDK; en pantallas táctiles con una pulsación larga) y un menú «Mover a…» como alternativa accesible. No guarda nada: emite lo pedido.
+ * (CDK; en pantallas táctiles con una pulsación larga) y un menú «Mover a…» como alternativa accesible. Una ganada lleva el botón de carrito
+ * («Registrar venta», L2+) o, si ya tiene su venta, «Ver venta». No guarda nada: emite lo pedido.
  */
 @Component({
   selector: 'app-oportunidades-board',
@@ -46,7 +47,16 @@ export interface MoverEvento { oportunidad: OportunidadFila; etapa: Etapa }
                 <span class="value">{{ cfg.money(o.valor) }}</span>
                 <div class="foot">
                   @if (o.fecha_cierre_estimada) { <span class="chip" [class.late]="atrasada(o)"><mat-icon>event</mat-icon>{{ fecha(o.fecha_cierre_estimada) }}</span> }
-                  @if (o.responsable_nombre) { <span class="avatar" [title]="o.responsable_nombre">{{ iniciales(o.responsable_nombre) }}</span> }
+                  <span class="end">
+                    @if (o.id_venta) {
+                      <button mat-icon-button class="sale done" [id]="'btn-view-sale-' + o.id" (click)="$event.stopPropagation(); verVenta.emit(o)" (keydown.enter)="$event.stopPropagation()"
+                              [title]="'crm.opp.view_sale' | translate" [attr.aria-label]="'crm.opp.view_sale' | translate"><mat-icon>receipt_long</mat-icon></button>
+                    } @else if (puedeVender() && o.estado === 'ganada' && o.activo) {
+                      <button mat-icon-button class="sale" [id]="'btn-sale-' + o.id" (click)="$event.stopPropagation(); registrarVenta.emit(o)" (keydown.enter)="$event.stopPropagation()"
+                              [title]="'crm.opp.register_sale' | translate" [attr.aria-label]="'crm.opp.register_sale' | translate"><mat-icon>add_shopping_cart</mat-icon></button>
+                    }
+                    @if (o.responsable_nombre) { <span class="avatar" [title]="o.responsable_nombre">{{ iniciales(o.responsable_nombre) }}</span> }
+                  </span>
                 </div>
                 @if (o.tags.length) { <div class="tags">@for (t of o.tags.slice(0, 2); track t.id) { <app-tag-chip [nombre]="t.nombre" [color]="t.color" /> }</div> }
               </article>
@@ -61,6 +71,8 @@ export interface MoverEvento { oportunidad: OportunidadFila; etapa: Etapa }
       <ng-template matMenuContent let-o="o">
         <button mat-menu-item (click)="abrir.emit(o)"><mat-icon>open_in_new</mat-icon>{{ 'crm.action.view' | translate }}</button>
         <button mat-menu-item (click)="editar.emit(o)"><mat-icon>edit</mat-icon>{{ 'common.edit' | translate }}</button>
+        @if (o.id_venta) { <button mat-menu-item (click)="verVenta.emit(o)"><mat-icon>receipt_long</mat-icon>{{ 'crm.opp.view_sale' | translate }}</button> }
+        @else if (puedeVender() && o.estado === 'ganada' && o.activo) { <button mat-menu-item (click)="registrarVenta.emit(o)"><mat-icon>add_shopping_cart</mat-icon>{{ 'crm.opp.register_sale' | translate }}</button> }
         <div class="menu-title" role="presentation">{{ 'crm.opp.move_to' | translate }}</div>
         @for (col of columnas(); track col.etapa.id) {
           @if (col.etapa.id !== o.id_etapa && col.etapa.activo) {
@@ -87,6 +99,8 @@ export interface MoverEvento { oportunidad: OportunidadFila; etapa: Etapa }
     .value { font: var(--mat-sys-title-small); }
     .foot { display: flex; align-items: center; justify-content: space-between; gap: 8px; }
     .chip { display: inline-flex; align-items: center; gap: 2px; font: var(--mat-sys-label-small); color: var(--md-sys-color-on-surface-variant); mat-icon { font-size: 14px; width: 14px; height: 14px; } &.late { color: var(--md-sys-color-error); } }
+    .end { display: flex; align-items: center; gap: 4px; margin-left: auto; }
+    .sale { margin: -8px -4px -8px 0; color: var(--md-sys-color-primary); &.done { color: var(--md-sys-color-tertiary); } }
     .avatar { width: 24px; height: 24px; border-radius: 50%; display: grid; place-items: center; font: var(--mat-sys-label-small); background: var(--md-sys-color-tertiary-container); color: var(--md-sys-color-on-tertiary-container); }
     .tags { display: flex; flex-wrap: wrap; gap: 4px; }
     .empty { padding: 12px 4px; font: var(--mat-sys-body-small); }
@@ -106,6 +120,10 @@ export class OportunidadesBoardComponent {
   readonly editar = output<OportunidadFila>();
   readonly mover = output<MoverEvento>();
   readonly verMas = output<ColumnaTablero>();
+  /** L2+: puede registrar la venta de una oportunidad ganada. */
+  readonly puedeVender = input(false);
+  readonly registrarVenta = output<OportunidadFila>();
+  readonly verVenta = output<OportunidadFila>();
 
   soltar(e: CdkDragDrop<ColumnaTablero, ColumnaTablero, OportunidadFila>): void {
     if (e.previousContainer === e.container) return;   // el orden dentro de una columna es automático (por valor)

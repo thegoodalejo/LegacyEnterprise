@@ -1,4 +1,4 @@
-import { ChangeDetectionStrategy, Component, computed, effect, inject, signal, untracked } from '@angular/core';
+import { ChangeDetectionStrategy, Component, Injectable, computed, effect, inject, signal, untracked } from '@angular/core';
 import { FormsModule } from '@angular/forms';
 import { MAT_DIALOG_DATA, MatDialog, MatDialogModule, MatDialogRef } from '@angular/material/dialog';
 import { MatButton, MatIconButton } from '@angular/material/button';
@@ -10,15 +10,22 @@ import { MatOption, MatSelect } from '@angular/material/select';
 import { ContactoPickerComponent } from '../../components/contacto-picker.component';
 import { DateInputComponent } from '../../components/date-input.component';
 import { CrmConfigService } from '../../services/crm-config.service';
-import { CategoriaItem, CrmService, ItemCatalogo, TipoContacto, VentaManual } from '../../services/crm.service';
+import { firstValueFrom } from 'rxjs';
+import { CategoriaItem, CrmService, ItemCatalogo, LineaOp, TipoContacto, VentaManual } from '../../services/crm.service';
 import { DialogService, dialogSize } from '../../services/dialog.service';
 import { LoadingService } from '../../services/loading.service';
 import { TranslatePipe, TranslationService } from '../../services/translation.service';
 import { formatDate, parseNumero } from './crm-format';
+import { VentaDialogComponent } from './venta-dialog.component';
 
 export interface VentaManualDialogData {
-  /** Cliente ya elegido (al registrar desde su perfil). */
+  /** Cliente ya elegido (al registrar desde su perfil o desde una oportunidad). */
   contacto?: { id: number; nombre: string; tipo: TipoContacto };
+  /**
+   * Venta desde una oportunidad ganada: el cliente queda fijo (el de la oportunidad) y las líneas llegan cargadas; sin líneas, entra una
+   * línea libre con el título y el valor. Solo falta el número de factura (el cursor arranca ahí). Todo sigue editable.
+   */
+  oportunidad?: { id: number; titulo: string; valor: number; lineas: LineaOp[] };
 }
 export interface VentaManualDialogResult { id: number; total: number; cliente: string }
 
@@ -43,6 +50,9 @@ const hoyIso = (): string => { const d = new Date(); return `${d.getFullYear()}-
   template: `
     <h2 mat-dialog-title>{{ (paso() === 'carrito' ? 'crm.cart.title' : 'crm.cart.review_title') | translate }}</h2>
     <mat-dialog-content>
+      @if (d.oportunidad; as op) {
+        <p class="from-op" id="sale-from-op"><mat-icon>trending_up</mat-icon><span>{{ 'crm.cart.from_opp' | translate: { title: op.titulo } }}</span></p>
+      }
       @if (paso() === 'carrito') {
         <div class="form">
           <section class="block">
@@ -51,7 +61,7 @@ const hoyIso = (): string => { const d = new Date(); return `${d.getFullYear()}-
                 <h3>{{ 'crm.opp.client' | translate }}</h3>
                 @if (contacto(); as c) {
                   <div class="chips"><span class="pill" id="sale-client-chip">{{ c.nombre }}</span>
-                    <button mat-icon-button type="button" (click)="contacto.set(null)" [attr.aria-label]="'common.clear' | translate"><mat-icon>close</mat-icon></button></div>
+                    @if (!d.oportunidad) { <button mat-icon-button type="button" (click)="contacto.set(null)" [attr.aria-label]="'common.clear' | translate"><mat-icon>close</mat-icon></button> }</div>
                 } @else {
                   <mat-button-toggle-group [value]="tipoBusqueda()" (change)="tipoBusqueda.set($event.value)" hideSingleSelectionIndicator [attr.aria-label]="'crm.opp.client' | translate">
                     <mat-button-toggle value="organizacion">{{ 'crm.tipo.organizacion' | translate }}</mat-button-toggle>
@@ -157,6 +167,7 @@ const hoyIso = (): string => { const d = new Date(); return `${d.getFullYear()}-
             <div><dt>{{ 'crm.opp.client' | translate }}</dt><dd><strong>{{ contacto()?.nombre }}</strong></dd></div>
             <div><dt>{{ 'crm.sales.date' | translate }}</dt><dd>{{ fmtFecha(fecha()) }}</dd></div>
             <div><dt>{{ 'crm.sales.document' | translate }}</dt><dd>{{ documento().trim() || ('crm.cart.no_document' | translate) }}</dd></div>
+            @if (d.oportunidad; as op) { <div><dt>{{ 'crm.cart.opp' | translate }}</dt><dd>{{ op.titulo }}</dd></div> }
           </dl>
           <div class="table-scroll">
             <table class="t">
@@ -188,6 +199,8 @@ const hoyIso = (): string => { const d = new Date(); return `${d.getFullYear()}-
   `,
   styles: `
     .form { display: flex; flex-direction: column; gap: 14px; padding-top: 4px; }
+    .from-op { display: flex; align-items: center; gap: 8px; margin: 4px 0 12px; padding: 8px 12px; border-radius: 12px; overflow-wrap: anywhere;
+      background: var(--md-sys-color-tertiary-container); color: var(--md-sys-color-on-tertiary-container); mat-icon { flex: none; } }
     .block { display: flex; flex-direction: column; gap: 10px; padding: 14px; border-radius: 16px; background: var(--md-sys-color-surface-container-low); border: 1px solid var(--md-sys-color-outline-variant); min-width: 0; }
     h3 { margin: 0; font: var(--mat-sys-title-small); color: var(--md-sys-color-on-surface-variant); }
     .row { display: flex; flex-wrap: wrap; gap: 12px; align-items: flex-start; > * { flex: 1 1 200px; min-width: 0; } > .cat { flex: 0 1 180px; } }
@@ -275,8 +288,13 @@ export class VentaManualDialogComponent {
     return null;
   });
 
+  /** Lo que había al abrir (vacío o lo precargado de la oportunidad): cancelar solo pregunta si algo cambió. */
+  private readonly inicial: string;
+
   constructor() {
-    // Cerrar con Esc o tocando fuera pasa por cancelar(): si ya hay algo en el carrito, pregunta antes de descartarlo.
+    if (this.d.oportunidad) this.lineas.set(this.lineasDeOportunidad(this.d.oportunidad));
+    this.inicial = this.estado();
+    // Cerrar con Esc o tocando fuera pasa por cancelar(): si el carrito cambió, pregunta antes de descartarlo.
     this.ref.disableClose = true;
     this.ref.backdropClick().subscribe(() => void this.cancelar());
     this.ref.keydownEvents().subscribe(e => { if (e.key === 'Escape') { e.preventDefault(); void this.cancelar(); } });
@@ -285,6 +303,21 @@ export class VentaManualDialogComponent {
       this.q(); this.categoria();
       untracked(() => void this.cargarCatalogo(true));
     });
+  }
+
+  /** Líneas de la oportunidad en el formato del carrito; sin líneas, una libre con el título y el valor (si lo tiene). */
+  private lineasDeOportunidad(op: NonNullable<VentaManualDialogData['oportunidad']>): LineaCarrito[] {
+    if (!op.lineas.length) {
+      return op.valor > 0 ? [{ key: this.nextKey++, id_item: null, nombre: '', codigo: null, unidad: null, descripcion: op.titulo.slice(0, 255), cantidad: '1', precio: this.texto(op.valor) }] : [];
+    }
+    return op.lineas.map(l => ({
+      key: this.nextKey++, id_item: l.id_item, nombre: l.item_nombre ?? l.descripcion ?? '', codigo: l.item_codigo ?? null, unidad: l.item_unidad ?? null,
+      descripcion: l.id_item ? '' : (l.descripcion ?? ''), cantidad: this.texto(l.cantidad), precio: this.texto(l.precio_unitario),
+    }));
+  }
+
+  private estado(): string {
+    return JSON.stringify([this.contacto()?.id ?? null, this.fecha(), this.documento().trim(), this.lineas().map(l => [l.id_item, l.descripcion, l.cantidad, l.precio])]);
   }
 
   // ─── Catálogo ──────────────────────────────────────────────────────────────────────────────────────────────────
@@ -351,7 +384,7 @@ export class VentaManualDialogComponent {
   // ─── Revisar y confirmar ───────────────────────────────────────────────────────────────────────────────────────
   private payload(): VentaManual {
     return {
-      id_contacto: this.contacto()!.id, fecha: this.fecha()!, documento: this.documento().trim(),
+      id_contacto: this.contacto()!.id, fecha: this.fecha()!, documento: this.documento().trim(), id_oportunidad: this.d.oportunidad?.id,
       lineas: this.lineas().map(l => ({ id_item: l.id_item, descripcion: l.id_item ? '' : l.descripcion.trim(), cantidad: this.cant(l), precio_unitario: this.precio(l) })),
     };
   }
@@ -387,7 +420,7 @@ export class VentaManualDialogComponent {
 
   async cancelar(): Promise<void> {
     if (this.ocupado()) return;
-    if (this.lineas().length) {
+    if (this.lineas().length && this.estado() !== this.inicial) {
       const ok = await this.dialogs.confirm({
         title: this.i18n.t('crm.cart.discard_title'), message: this.i18n.t('crm.cart.discard_msg'), confirmText: this.i18n.t('crm.cart.discard'), danger: true,
       });
@@ -400,7 +433,51 @@ export class VentaManualDialogComponent {
   fmtNum(n: number): string { return n.toLocaleString(this.i18n.lang() === 'en' ? 'en-US' : 'es-CO', { maximumFractionDigits: 4 }); }
 }
 
-/** Abre el carrito de venta manual con el tamaño estándar. */
+/** Abre el carrito de venta manual con el tamaño estándar (desde una oportunidad, el cursor arranca en el número de factura). */
 export function abrirVentaManualDialog(matDialog: MatDialog, data: VentaManualDialogData = {}): MatDialogRef<VentaManualDialogComponent, VentaManualDialogResult> {
-  return matDialog.open(VentaManualDialogComponent, { ...dialogSize('960px'), data, autoFocus: 'first-tabbable', disableClose: true });
+  return matDialog.open(VentaManualDialogComponent, { ...dialogSize('960px'), data, autoFocus: data.oportunidad ? '#sale-doc' : 'first-tabbable', disableClose: true });
+}
+
+/**
+ * Abrir el carrito, registrar la venta de una oportunidad ganada y ver el detalle de una venta, con el mismo aviso en todas las pantallas
+ * (Ventas, perfil del contacto, tablero y lista de oportunidades, ficha de la oportunidad).
+ */
+@Injectable({ providedIn: 'root' })
+export class VentasUiService {
+  private matDialog = inject(MatDialog);
+  private crm = inject(CrmService);
+  private loading = inject(LoadingService);
+  private dialogs = inject(DialogService);
+  private i18n = inject(TranslationService);
+  private cfg = inject(CrmConfigService);
+
+  /** Carrito; si se registra, corre `alRegistrar` (p. ej. recargar la pantalla) y avisa con el total y el cliente. */
+  async registrar(data: VentaManualDialogData = {}, alRegistrar?: (r: VentaManualDialogResult) => void): Promise<VentaManualDialogResult | undefined> {
+    const r = await firstValueFrom(abrirVentaManualDialog(this.matDialog, data).afterClosed());
+    if (!r) return undefined;
+    alRegistrar?.(r);
+    await this.dialogs.success({ title: this.i18n.t('crm.cart.saved'), message: this.i18n.t('crm.cart.saved_msg', { total: this.cfg.money(r.total), client: r.cliente }) });
+    return r;
+  }
+
+  /** Carrito con todo lo de la oportunidad cargado. Si ya tiene su venta (otra persona la registró), avisa y abre esa venta. */
+  async desdeOportunidad(idOportunidad: number, alRegistrar?: (r: VentaManualDialogResult) => void): Promise<VentaManualDialogResult | undefined> {
+    const r = await this.loading.wrap(() => this.crm.getOportunidad(idOportunidad));
+    if (!r.action || !r.data) { await this.dialogs.error({ title: this.i18n.t('crm.opp.load_error'), message: r.mensaje }); return undefined; }
+    const { oportunidad: o, lineas, venta } = r.data;
+    if (venta) {
+      await this.dialogs.info({ title: this.i18n.t('crm.opp.sale_exists'), message: this.i18n.t('crm.opp.sale_exists_msg') });
+      if (await this.ver(venta.id)) alRegistrar?.({ id: venta.id, total: venta.total, cliente: o.contacto_nombre });
+      return undefined;
+    }
+    return this.registrar({
+      contacto: { id: o.id_contacto, nombre: o.contacto_nombre, tipo: o.contacto_tipo },
+      oportunidad: { id: o.id, titulo: o.titulo, valor: o.valor, lineas },
+    }, alRegistrar);
+  }
+
+  /** Detalle de una venta; resuelve true si se anuló o restauró (para recargar). */
+  async ver(idVenta: number): Promise<boolean> {
+    return !!(await firstValueFrom(this.matDialog.open(VentaDialogComponent, { ...dialogSize('720px'), data: idVenta }).afterClosed()));
+  }
 }

@@ -1,5 +1,6 @@
 <?php
-// Detalle de una oportunidad: datos, líneas, etiquetas, campos personalizados, notas y las etapas de su embudo (para cambiarla de etapa).
+// Detalle de una oportunidad: datos, líneas, etiquetas, campos personalizados, notas, las etapas de su embudo (para cambiarla de etapa)
+// y su venta activa si se registró desde ella (`venta`, o null).
 // POST: id.
 require_once '../db_connection.php';
 require_once '../cors.php';
@@ -26,6 +27,7 @@ $data = [
     'campos' => crmCamposConValor($conn, $ctx, $id, 'oportunidad'),
     'notas' => crmOpNotas($conn, $id)['notas'],
     'etapas' => $etapas,
+    'venta' => crmOpVenta($conn, $ctx, $id),
     'config' => crmConfig($conn, $ctx['id_empresa']),
 ];
 $conn->close();

@@ -1,4 +1,4 @@
-import { ChangeDetectionStrategy, Component, computed, effect, inject, signal, untracked } from '@angular/core';
+import { ChangeDetectionStrategy, Component, computed, effect, inject, signal, untracked, viewChild } from '@angular/core';
 import { FormsModule } from '@angular/forms';
 import { Router, RouterLink } from '@angular/router';
 import { MatDialog } from '@angular/material/dialog';
@@ -35,6 +35,7 @@ import { OportunidadCierreDialogComponent, CierreDialogResult, hoyIso } from './
 import { abrirOportunidadDialog } from './oportunidad-dialog.component';
 import { MetasPanelComponent } from './metas-panel.component';
 import { MoverEvento, OportunidadesBoardComponent } from './oportunidades-board.component';
+import { VentasUiService } from './venta-manual-dialog.component';
 import { TranslatedPaginatorIntl } from './translated-paginator-intl';
 
 type Vista = 'tablero' | 'lista';
@@ -236,7 +237,8 @@ const VISTA_KEY = 'crm_opp_vista';
         } @else if (vista() === 'tablero') {
           @if (tablero(); as t) {
             @if (t.columnas.length) {
-              <app-oportunidades-board [columnas]="t.columnas" (abrir)="abrir($event)" (editar)="editar($event)" (mover)="onMover($event)" (verMas)="verMasColumna($event)" />
+              <app-oportunidades-board [columnas]="t.columnas" [puedeVender]="canDelete()" (abrir)="abrir($event)" (editar)="editar($event)" (mover)="onMover($event)" (verMas)="verMasColumna($event)"
+                                      (registrarVenta)="registrarVenta($event)" (verVenta)="verVenta($event)" />
             }
           }
         } @else {
@@ -287,7 +289,13 @@ const VISTA_KEY = 'crm_opp_vista';
                 </ng-container>
                 <ng-container matColumnDef="acciones">
                   <th mat-header-cell *matHeaderCellDef class="col-act"></th>
-                  <td mat-cell *matCellDef="let o" class="col-act"><button mat-icon-button [matMenuTriggerFor]="rowMenu" [matMenuTriggerData]="{ o }" (click)="$event.stopPropagation()" [attr.aria-label]="'common.more' | translate"><mat-icon>more_vert</mat-icon></button></td>
+                  <td mat-cell *matCellDef="let o" class="col-act"><div class="acts">
+                    @if (o.id_venta) {
+                      <button mat-icon-button class="sale done" [id]="'row-view-sale-' + o.id" (click)="$event.stopPropagation(); verVenta(o)" [title]="'crm.opp.view_sale' | translate" [attr.aria-label]="'crm.opp.view_sale' | translate"><mat-icon>receipt_long</mat-icon></button>
+                    } @else if (canDelete() && o.estado === 'ganada' && o.activo) {
+                      <button mat-icon-button class="sale" [id]="'row-sale-' + o.id" (click)="$event.stopPropagation(); registrarVenta(o)" [title]="'crm.opp.register_sale' | translate" [attr.aria-label]="'crm.opp.register_sale' | translate"><mat-icon>add_shopping_cart</mat-icon></button>
+                    }
+                    <button mat-icon-button [matMenuTriggerFor]="rowMenu" [matMenuTriggerData]="{ o }" (click)="$event.stopPropagation()" [attr.aria-label]="'common.more' | translate"><mat-icon>more_vert</mat-icon></button></div></td>
                 </ng-container>
                 <tr mat-header-row *matHeaderRowDef="columns()"></tr>
                 <tr mat-row *matRowDef="let o; columns: columns()" class="row" [class.archived]="!o.activo" [class.selected]="isSel(o.id)" (click)="rowClick(o)"></tr>
@@ -304,6 +312,8 @@ const VISTA_KEY = 'crm_opp_vista';
         <ng-template matMenuContent let-o="o">
           <button mat-menu-item (click)="abrir(o)"><mat-icon>open_in_new</mat-icon>{{ 'crm.action.view' | translate }}</button>
           <button mat-menu-item (click)="editar(o)"><mat-icon>edit</mat-icon>{{ 'common.edit' | translate }}</button>
+          @if (o.id_venta) { <button mat-menu-item (click)="verVenta(o)"><mat-icon>receipt_long</mat-icon>{{ 'crm.opp.view_sale' | translate }}</button> }
+          @else if (canDelete() && o.estado === 'ganada' && o.activo) { <button mat-menu-item (click)="registrarVenta(o)"><mat-icon>add_shopping_cart</mat-icon>{{ 'crm.opp.register_sale' | translate }}</button> }
           @if (o.activo) {
             @for (e of etapasDe(o); track e.id) { @if (e.id !== o.id_etapa) { <button mat-menu-item (click)="onMover({ oportunidad: o, etapa: e })"><mat-icon [style.color]="e.color || null">circle</mat-icon>{{ 'crm.opp.move_to' | translate }} {{ e.nombre }}</button> } }
           }
@@ -343,6 +353,7 @@ const VISTA_KEY = 'crm_opp_vista';
     table { width: 100%; }
     .row { cursor: pointer; &:hover { background: var(--md-sys-color-surface-container-low); } &.archived td { opacity: 0.6; } &.selected { background: var(--md-sys-color-secondary-container); } }
     .col-sel { width: 56px; padding-right: 0; } .col-act { width: 56px; text-align: right; } .num { text-align: right; white-space: nowrap; }
+    .acts { display: flex; justify-content: flex-end; align-items: center; } .sale { color: var(--md-sys-color-primary); &.done { color: var(--md-sys-color-tertiary); } }
     .name-text { display: flex; flex-direction: column; min-width: 180px; padding: 8px 0; overflow-wrap: anywhere; }
     .small { font: var(--mat-sys-body-small); } .mini { font-size: 14px; width: 14px; height: 14px; vertical-align: -2px; margin-right: 2px; }
     .stage { display: inline-flex; align-items: center; gap: 6px; } .dot { width: 10px; height: 10px; border-radius: 50%; }
@@ -394,6 +405,8 @@ export default class OportunidadesPage {
   readonly sinEmbudo = computed(() => this.embudosCargados() && !this.embudos().length);
   readonly esAdmin = computed(() => this.session.hasMinRole('L4'));
   readonly canDelete = computed(() => this.session.hasMinRole('L2'));
+  private ventasUi = inject(VentasUiService);
+  private readonly metasPanel = viewChild(MetasPanelComponent);
 
   readonly filtros = computed<FiltrosOp>(() => {
     const f: FiltrosOp = { archivo: this.archivo() };
@@ -613,6 +626,11 @@ export default class OportunidadesPage {
   abrir(o: OportunidadFila): void { void this.router.navigate(['/m/crm/oportunidades', o.id]); }
   crear(): void { abrirOportunidadDialog(this.matDialog, {}).afterClosed().subscribe(r => { if (r) void this.load(); }); }
   editar(o: OportunidadFila): void { abrirOportunidadDialog(this.matDialog, { id: o.id }).afterClosed().subscribe(r => { if (r) void this.load(); }); }
+
+  /** Carrito con todo lo de la oportunidad ganada; al registrar, la tarjeta o fila pasa a «Ver venta» y el panel de metas se recarga. */
+  registrarVenta(o: OportunidadFila): void { void this.ventasUi.desdeOportunidad(o.id, () => this.trasVenta()); }
+  verVenta(o: OportunidadFila): void { if (o.id_venta) void this.ventasUi.ver(o.id_venta).then(cambio => { if (cambio) this.trasVenta(); }); }
+  private trasVenta(): void { void this.load(true); void this.metasPanel()?.load(); }
 
   async onMover(e: MoverEvento): Promise<void> {
     const { oportunidad: o, etapa } = e;

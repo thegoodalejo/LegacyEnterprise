@@ -64,11 +64,12 @@ function crmEtapaInicial(mysqli $conn, array $ctx, int $idEmbudo = 0): ?array
 
 // ─── Lectura ─────────────────────────────────────────────────────────────────────────────────────────────────────────
 
-/** SELECT y JOINs comunes del listado y el tablero (alias o, c, pc, e, ru). */
+/** SELECT y JOINs comunes del listado y el tablero (alias o, c, pc, e, ru). id_venta = su venta activa (registrada desde la oportunidad), o NULL. */
 function crmOpSelect(): string
 {
     return "SELECT o.id, o.titulo, o.id_embudo, o.id_etapa, o.id_contacto, o.id_persona_contacto, o.id_responsable, o.valor, o.fecha_cierre_estimada,
                    o.estado, o.fecha_cierre_real, o.etapa_desde, o.activo, o.created_at,
+                   (SELECT MAX(v.id) FROM crm_ventas v WHERE v.id_oportunidad = o.id AND v.activo = 1) AS id_venta,
                    c.nombre_completo AS contacto_nombre, c.tipo AS contacto_tipo, pc.nombre_completo AS persona_nombre,
                    e.nombre AS etapa_nombre, e.tipo AS etapa_tipo, e.probabilidad AS etapa_probabilidad, e.color AS etapa_color,
                    COALESCE(ru.nombre, ru.email) AS responsable_nombre
@@ -98,7 +99,7 @@ function crmOpFilas(mysqli $conn, array $rows): array
     }
     foreach ($rows as &$r) {
         foreach (['id', 'id_embudo', 'id_etapa', 'id_contacto', 'etapa_probabilidad'] as $k) $r[$k] = (int)$r[$k];
-        foreach (['id_persona_contacto', 'id_responsable'] as $k) $r[$k] = $r[$k] !== null ? (int)$r[$k] : null;
+        foreach (['id_persona_contacto', 'id_responsable', 'id_venta'] as $k) $r[$k] = $r[$k] !== null ? (int)$r[$k] : null;
         $r['valor'] = (float)$r['valor'];
         $r['activo'] = (int)$r['activo'] === 1;
         $r['tags'] = $tags[$r['id']] ?? [];
@@ -135,6 +136,22 @@ function crmOpBase(mysqli $conn, array $ctx, int $id): ?array
     $r['activo'] = (int)$r['activo'] === 1;
     $r['contacto_activo'] = (int)$r['contacto_activo'] === 1;
     return $r;
+}
+
+/**
+ * La venta ACTIVA registrada desde esta oportunidad (como mucho una: regla de save_venta y anular_venta), o null.
+ * Puede ser la manual o la importada que la reemplazó (el vínculo pasa a la importada).
+ */
+function crmOpVenta(mysqli $conn, array $ctx, int $idOp): ?array
+{
+    $v = crmRow($conn,
+        'SELECT v.id, v.fecha, v.documento, v.total, v.id_importacion, v.created_at, COALESCE(u.nombre, u.email) AS creado_por
+           FROM crm_ventas v LEFT JOIN le_usuarios u ON u.id = v.created_by
+          WHERE v.id_oportunidad = ? AND v.id_sede = ? AND v.activo = 1 ORDER BY v.id DESC LIMIT 1', 'ii', [$idOp, $ctx['id_sede']]);
+    if (!$v) return null;
+    $v['id'] = (int)$v['id']; $v['total'] = (float)$v['total'];
+    $v['id_importacion'] = $v['id_importacion'] !== null ? (int)$v['id_importacion'] : null;
+    return $v;
 }
 
 function crmOpLineas(mysqli $conn, int $idOp): array

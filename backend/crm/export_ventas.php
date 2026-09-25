@@ -1,7 +1,7 @@
 <?php
 // Ventas para exportar a PDF/Excel (los arma el navegador), por páginas, con sus líneas.
 // POST: filtros (JSON, ver crmVentaFiltros), pagina, por_pagina (máx. 1000), total_esperado (opcional: 409 si cambió), formato (pdf|xlsx, auditoría).
-// Devuelve {ventas:[…] (lote = archivo de la importación; NULL = registrada a mano), lineas:[…] (las de las ventas de la página), total, pagina, por_pagina,
+// Devuelve {ventas:[…] (lote = archivo de la importación; NULL = registrada a mano; oportunidad = título si se registró desde una), lineas:[…] (las de las ventas de la página), total, pagina, por_pagina,
 // resumen, config}. La primera página audita crm_exportar.
 require_once '../db_connection.php';
 require_once '../cors.php';
@@ -25,8 +25,9 @@ if ($total > CRM_EXPORT_MAX) authFail(400, 'Máximo ' . number_format(CRM_EXPORT
 $rows = crmRows($conn,
     'SELECT v.id, v.fecha, v.documento, v.total, v.unidades, v.activo, v.id_contacto, c.nombre_completo AS cliente, c.tipo AS cliente_tipo,
             COALESCE(po.documento_numero, pp.documento_numero) AS cliente_documento,
-            IF(v.id_importacion IS NULL, NULL, COALESCE(i.archivo, CONCAT(\'#\', v.id_importacion))) AS lote
+            IF(v.id_importacion IS NULL, NULL, COALESCE(i.archivo, CONCAT(\'#\', v.id_importacion))) AS lote, op.titulo AS oportunidad
        FROM crm_ventas v JOIN crm_contactos c ON c.id = v.id_contacto
+  LEFT JOIN crm_oportunidades op ON op.id = v.id_oportunidad
   LEFT JOIN crm_contactos_organizaciones po ON po.id = c.id LEFT JOIN crm_contactos_personas pp ON pp.id = c.id
   LEFT JOIN crm_importaciones i ON i.id = v.id_importacion
       WHERE ' . $w['sql'] . ' ORDER BY v.fecha, v.id LIMIT ? OFFSET ?', $w['types'] . 'ii', [...$w['params'], $porPagina, ($pagina - 1) * $porPagina]);

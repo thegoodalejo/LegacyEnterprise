@@ -100,6 +100,8 @@ export interface EntradaHistorial {
     tags?: string[] | { agregados: string[]; quitados: string[] };
     persona?: { id: number; nombre: string }; organizacion?: { id: number; nombre: string };
     desde?: { id: number; nombre: string }; hasta?: { id: number; nombre: string }; estado?: string; motivo?: string | null;
+    /** Venta registrada desde la oportunidad (venta_registrada, venta_anulada, venta_restaurada, venta_reemplazada). */
+    id_venta?: number; documento?: string | null; total?: number; id_importacion?: number | null;
   } | null;
 }
 export interface ListaHistorial { historial: EntradaHistorial[]; total: number; pagina: number; por_pagina: number; desde: string; hay_anteriores: boolean }
@@ -123,6 +125,8 @@ export interface OportunidadFila {
   contacto_nombre: string; contacto_tipo: TipoContacto; persona_nombre: string | null;
   etapa_nombre: string; etapa_tipo: TipoEtapa; etapa_probabilidad: number; etapa_color: string | null;
   responsable_nombre: string | null; tags: CrmTag[];
+  /** Su venta activa, si se registró desde la oportunidad. */
+  id_venta: number | null;
 }
 export interface ResumenEstado { n: number; valor: number; ponderado: number }
 export interface ResumenOp { abierta: ResumenEstado; ganada: ResumenEstado; perdida: ResumenEstado; total: number }
@@ -155,6 +159,8 @@ export interface NotaOp { id: number; nota: string; created_at: string; updated_
 export interface OportunidadDetalle {
   oportunidad: OportunidadBase; lineas: LineaOp[]; tags: (CrmTag & { id_grupo: number | null; activo: boolean })[]; campos: CampoConValor[];
   notas: NotaOp[]; etapas: Etapa[]; config: ConfigCrm;
+  /** Venta activa registrada desde esta oportunidad (una sola), o null. */
+  venta: { id: number; fecha: string; documento: string | null; total: number; id_importacion: number | null; created_at: string; creado_por: string | null } | null;
 }
 
 export interface ExportOportunidad {
@@ -194,7 +200,8 @@ export interface ListaVentas { ventas: VentaFila[]; total: number; pagina: numbe
 export interface GruposVentas<T> { grupos: T[]; total: number; pagina: number; por_pagina: number; resumen: ResumenVentas }
 export interface VentaDetalle {
   venta: { id: number; fecha: string; documento: string | null; total: number; unidades: number; activo: boolean; id_importacion: number | null; id_contacto: number;
-    created_at: string; cliente: string; cliente_tipo: TipoContacto; archivo: string | null; creado_por: string | null };
+    created_at: string; cliente: string; cliente_tipo: TipoContacto; archivo: string | null; creado_por: string | null;
+    id_oportunidad: number | null; oportunidad_titulo: string | null };
   lineas: { id: number; id_item: number | null; codigo: string | null; nombre: string | null; unidad: string | null; categoria: string | null; cantidad: number; precio_unitario: number; total: number }[];
   /** creado (manual), anulado ({motivo}), restaurado, reemplazado ({id_importacion}; `archivo` = el archivo de esa importación). */
   historial: { id: number; accion: string; detalle: { motivo?: string; id_importacion?: number | null } | null; created_at: string; usuario: string | null; archivo: string | null }[];
@@ -202,6 +209,8 @@ export interface VentaDetalle {
 /** Venta registrada a mano: líneas del catálogo (id_item) o libres (descripcion). */
 export interface VentaManual {
   id_contacto: number; fecha: string; documento: string;
+  /** Venta desde una oportunidad ganada (una sola por oportunidad; el cliente es el de la oportunidad). */
+  id_oportunidad?: number;
   lineas: { id_item: number | null; descripcion: string; cantidad: number; precio_unitario: number }[];
 }
 export interface Importacion {
@@ -217,7 +226,7 @@ export interface ResultadoBloque {
 }
 export interface PlantillaImport { id: number; nombre: string; mapeo: Record<string, unknown>; updated_at: string }
 export interface PaginaExportVentas {
-  ventas: (Omit<VentaFila, 'lineas' | 'id_importacion'> & { cliente_documento: string | null; lote: string | null })[];
+  ventas: (Omit<VentaFila, 'lineas' | 'id_importacion'> & { cliente_documento: string | null; lote: string | null; oportunidad: string | null })[];
   lineas: { id_venta: number; codigo: string | null; nombre: string | null; categoria: string | null; unidad: string | null; cantidad: number; precio_unitario: number; total: number }[];
   total: number; pagina: number; por_pagina: number; resumen: ResumenVentas; config: ConfigCrm;
 }

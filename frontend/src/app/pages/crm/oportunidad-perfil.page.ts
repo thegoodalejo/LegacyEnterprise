@@ -24,6 +24,7 @@ import { formatDateTime, isoToDmy } from './crm-format';
 import { HistorialDialogComponent } from './historial-dialog.component';
 import { CierreDialogResult, OportunidadCierreDialogComponent, hoyIso } from './oportunidad-cierre-dialog.component';
 import { abrirOportunidadDialog } from './oportunidad-dialog.component';
+import { VentasUiService } from './venta-manual-dialog.component';
 
 /** Editar el texto de una nota. */
 @Component({
@@ -125,6 +126,25 @@ export class NotaDialogComponent {
             </section>
           }
 
+          @if (o.estado === 'ganada' || det.venta) {
+            <section class="card" id="op-sale">
+              <h2>{{ 'crm.opp.sale' | translate }}</h2>
+              @if (det.venta; as v) {
+                <div class="sale-row"><mat-icon>receipt_long</mat-icon>
+                  <span class="lt"><strong id="op-sale-total">{{ cfg.money(v.total) }}</strong>
+                    <span class="muted small">{{ 'crm.sales.document' | translate }}: {{ v.documento || '—' }} · {{ fmt(v.fecha) }}</span>
+                    <span class="muted small">{{ (v.id_importacion ? 'crm.opp.sale_imported' : 'crm.opp.sale_by') | translate: { date: fmtDt(v.created_at), user: v.creado_por || '—' } }}</span></span>
+                </div>
+                <button mat-stroked-button class="add" id="btn-op-view-sale" (click)="verVenta(v.id)"><mat-icon>open_in_new</mat-icon>{{ 'crm.opp.view_sale' | translate }}</button>
+              } @else if (canAudit() && o.activo) {
+                <p class="muted small">{{ 'crm.opp.sale_hint' | translate }}</p>
+                <button mat-flat-button class="add" id="btn-op-sale" (click)="registrarVenta()"><mat-icon>add_shopping_cart</mat-icon>{{ 'crm.opp.register_sale' | translate }}</button>
+              } @else {
+                <p class="muted">{{ 'crm.opp.sale_none' | translate }}</p>
+              }
+            </section>
+          }
+
           <section class="card" id="op-notes">
             <h2>{{ 'crm.opp.notes' | translate }}</h2>
             <mat-form-field appearance="outline" subscriptSizing="dynamic" class="full">
@@ -195,6 +215,7 @@ export class NotaDialogComponent {
     .chips { display: flex; flex-wrap: wrap; gap: 6px; }
     .line { display: grid; grid-template-columns: 1fr auto auto; gap: 8px; align-items: center; padding: 6px 0; border-bottom: 1px solid var(--md-sys-color-outline-variant); &.total { border: none; font: var(--mat-sys-title-small); grid-template-columns: 1fr auto; } }
     .lt { display: flex; flex-direction: column; min-width: 0; overflow-wrap: anywhere; }
+    .sale-row { display: flex; gap: 12px; align-items: flex-start; mat-icon { flex: none; color: var(--md-sys-color-tertiary); } }
     .full { width: 100%; } .add { align-self: flex-end; }
     .note { padding: 8px 0; border-top: 1px solid var(--md-sys-color-outline-variant); }
     .meta { display: flex; flex-wrap: wrap; align-items: center; gap: 4px; }
@@ -213,6 +234,7 @@ export default class OportunidadPerfilPage {
   private session = inject(SessionService);
   readonly i18n = inject(TranslationService);
   readonly cfg = inject(CrmConfigService);
+  private ventasUi = inject(VentasUiService);
   private reportes = inject(CrmOppReportService);
   readonly alcanceFicha = computed(() => [{ id: 'ficha', etiqueta: this.i18n.t('crm.oreport.scope_sheet') }]);
 
@@ -237,6 +259,13 @@ export default class OportunidadPerfilPage {
   }
 
   fmt(iso: string): string { return isoToDmy(iso); }
+
+  /** Carrito con el cliente y las líneas de esta oportunidad ganada (solo falta el número de factura); al registrar, la ficha se recarga. */
+  registrarVenta(): void {
+    const o = this.d()?.oportunidad;
+    if (o) void this.ventasUi.desdeOportunidad(o.id, () => void this.load());
+  }
+  verVenta(id: number): void { void this.ventasUi.ver(id).then(cambio => { if (cambio) void this.load(); }); }
   fmtDt(s: string): string { return formatDateTime(s); }
   valor(f: CampoConValor): string {
     const v = f.valor;

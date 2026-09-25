@@ -2,6 +2,7 @@ import { ChangeDetectionStrategy, Component, computed, inject, signal } from '@a
 import { MAT_DIALOG_DATA, MatDialogModule } from '@angular/material/dialog';
 import { MatButton } from '@angular/material/button';
 import { MatIcon } from '@angular/material/icon';
+import { CrmConfigService } from '../../services/crm-config.service';
 import { CrmService, EntradaHistorial } from '../../services/crm.service';
 import { LoadingService } from '../../services/loading.service';
 import { TranslatePipe, TranslationService } from '../../services/translation.service';
@@ -69,6 +70,7 @@ export class HistorialDialogComponent {
   private crm = inject(CrmService);
   private loading = inject(LoadingService);
   private i18n = inject(TranslationService);
+  private cfg = inject(CrmConfigService);
 
   private readonly entradas = signal<EntradaHistorial[]>([]);
   private readonly responsables = signal<Map<number, string>>(new Map());
@@ -155,6 +157,18 @@ export class HistorialDialogComponent {
           detalles: det.motivo ? [this.t('crm.hist.reason', { reason: det.motivo })] : [],
         };
       case 'nota_agregada': return { ...base, icon: 'sticky_note_2', titulo: this.t('crm.hist.note_added'), detalles: [] };
+      case 'venta_registrada':
+      case 'venta_restaurada':
+      case 'venta_reemplazada': {
+        const d: string[] = [];
+        if (det.documento) d.push(`${this.t('crm.sales.document')}: ${det.documento}`);
+        if (typeof det.total === 'number') d.push(`${this.t('crm.sales.total')}: ${this.cfg.money(det.total)}`);
+        const icon = e.accion === 'venta_reemplazada' ? 'swap_horiz' : e.accion === 'venta_restaurada' ? 'restore' : 'add_shopping_cart';
+        return { ...base, icon, titulo: this.t(`crm.hist.${e.accion}`), detalles: d };
+      }
+      case 'venta_anulada':
+        return { ...base, icon: 'block', titulo: this.t('crm.hist.venta_anulada'),
+          detalles: [det.documento ? `${this.t('crm.sales.document')}: ${det.documento}` : '', det.motivo ? this.t('crm.hist.reason', { reason: det.motivo }) : ''].filter(x => !!x) };
       case 'nota_eliminada': return { ...base, icon: 'speaker_notes_off', titulo: this.t('crm.hist.note_removed'), detalles: [] };
       case 'vinculo_agregado':
       case 'vinculo_actualizado':

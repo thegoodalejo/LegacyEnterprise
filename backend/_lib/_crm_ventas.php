@@ -275,7 +275,13 @@ function crmVentasProcesar(mysqli $conn, array $ctx, array $ventas, array $op, ?
         }
         $dup = $v['documento'] !== null ? ($existentes[crmVentaClaveTexto($v['documento'])] ?? []) : [];
         if ($dup && $op['duplicados'] === 'omitir') { $res['ventas_omitidas']++; $res['filas_ok'] += count($v['filas']); continue; }
+        $idOpHeredada = null;
         if ($dup) {
+            // Si la venta reemplazada venía de una oportunidad (y es del mismo cliente), la importada hereda el vínculo: la oportunidad sigue
+            // «con su venta» y no se registra dos veces.
+            $h = crmRow($conn, 'SELECT MAX(id_oportunidad) AS op FROM crm_ventas WHERE id_sede = ? AND id_contacto = ? AND id IN (' . crmMarks(count($dup)) . ')',
+                'ii' . str_repeat('i', count($dup)), [$ctx['id_sede'], $c['id'], ...$dup]);
+            $idOpHeredada = $h && $h['op'] !== null ? (int)$h['op'] : null;
             crmExec($conn, 'UPDATE crm_ventas SET activo = 0, updated_by = ? WHERE id_sede = ? AND id IN (' . crmMarks(count($dup)) . ')',
                 'ii' . str_repeat('i', count($dup)), [$ctx['id_usuario'], $ctx['id_sede'], ...$dup]);
             // En el historial de la venta reemplazada (una manual también puede serlo); en la simulación se revierte con la transacción.
@@ -302,9 +308,13 @@ function crmVentasProcesar(mysqli $conn, array $ctx, array $ventas, array $op, ?
         }
         $total = round(array_sum(array_column($lineas, 'total')), 2);
         $unidades = round(array_sum(array_column($lineas, 'cantidad')), 4);
-        crmExec($conn, 'INSERT INTO crm_ventas (id_sede, id_contacto, fecha, documento, total, unidades, id_importacion, created_by, updated_by) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)',
-            'iissddiii', [$ctx['id_sede'], $c['id'], $v['fecha'], $v['documento'], $total, $unidades, $idImportacion, $ctx['id_usuario'], $ctx['id_usuario']]);
+        crmExec($conn, 'INSERT INTO crm_ventas (id_sede, id_contacto, fecha, documento, total, unidades, id_importacion, id_oportunidad, created_by, updated_by) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)',
+            'iissddiiii', [$ctx['id_sede'], $c['id'], $v['fecha'], $v['documento'], $total, $unidades, $idImportacion, $idOpHeredada, $ctx['id_usuario'], $ctx['id_usuario']]);
         $idVenta = (int)$conn->insert_id;
+        if ($idOpHeredada !== null) {
+            auditRegistro($conn, $ctx['id_sede'], 'crm', 'crm_oportunidades', $idOpHeredada, 'venta_reemplazada',
+                ['id_venta' => $idVenta, 'documento' => $v['documento'], 'total' => $total, 'id_importacion' => $idImportacion]);
+        }
         foreach (array_chunk($lineas, 200) as $chunk) {
             $vals = []; $params = [];
             foreach ($chunk as $l) {
@@ -354,10 +364,27 @@ function crmVentaExigirDocumentoLibre(mysqli $conn, array $ctx, ?string $documen
  * importación: el navegador puede ir un día adelante del servidor), documento opcional y libre entre las ventas activas, y líneas
  * [{id_item | descripcion, cantidad, precio_unitario}] con las mismas reglas que las de una oportunidad (ítem activo del catálogo o descripción libre,
  * cantidad > 0, precio ≥ 0, total = cantidad × precio). A las líneas del catálogo les deja el código y el nombre del ítem en ese momento.
- * Devuelve {id_contacto, cliente, fecha, documento, lineas, total, unidades}.
+ * Con `id_oportunidad` (venta desde una oportunidad ganada): la oportunidad debe ser de la sede, estar activa y ganada y no tener otra venta
+ * activa; el cliente es el de la oportunidad; se aceptan ítems desactivados si ya estaban en sus líneas. Con `$bloquear` (al guardar) la fila de
+ * la oportunidad queda bloqueada hasta el commit, para que dos personas no registren a la vez la misma.
+ * Devuelve {id_contacto, cliente, fecha, documento, lineas, total, unidades, oportunidad (null | {id, titulo})}.
  */
-function crmVentaManualParsear(mysqli $conn, array $ctx, array $src, ?array $lineasSrc): array
+function crmVentaManualParsear(mysqli $conn, array $ctx, array $src, ?array $lineasSrc, bool $bloquear = false): array
 {
+    $oportunidad = null; $itemsPrevios = [];
+    $idOp = (int)($src['id_oportunidad'] ?? 0);
+    if ($idOp > 0) {
+        $o = crmRow($conn, 'SELECT id, titulo, id_contacto, estado, activo FROM crm_oportunidades WHERE id = ? AND id_sede = ? LIMIT 1' . ($bloquear ? ' FOR UPDATE' : ''),
+            'ii', [$idOp, $ctx['id_sede']]);
+        if (!$o) authFail(404, 'Oportunidad no encontrada');
+        if ((int)$o['activo'] !== 1) authFail(409, 'La oportunidad está archivada');
+        if ($o['estado'] !== 'ganada') authFail(409, 'Solo se registra la venta de una oportunidad ganada');
+        crmVentaExigirOportunidadLibre($conn, $ctx, $idOp);
+        if ((int)($src['id_contacto'] ?? 0) !== (int)$o['id_contacto']) authFail(400, 'La venta de una oportunidad es para su mismo cliente');
+        $oportunidad = ['id' => $idOp, 'titulo' => $o['titulo']];
+        $itemsPrevios = array_values(array_filter(array_map(static fn($l) => $l['id_item'], crmOpLineas($conn, $idOp))));
+    }
+
     $idContacto = (int)($src['id_contacto'] ?? 0);
     $c = $idContacto > 0 ? crmRow($conn, 'SELECT id, nombre_completo, activo FROM crm_contactos WHERE id = ? AND id_sede = ? LIMIT 1', 'ii', [$idContacto, $ctx['id_sede']]) : null;
     if (!$c) authFail(400, 'Elige el cliente de la venta');
@@ -371,7 +398,7 @@ function crmVentaManualParsear(mysqli $conn, array $ctx, array $src, ?array $lin
     crmVentaExigirDocumentoLibre($conn, $ctx, $documento);
 
     if (!$lineasSrc) authFail(400, 'Agrega al menos un ítem a la venta');
-    $pl = crmOpLineasParsear($conn, $ctx, $lineasSrc);
+    $pl = crmOpLineasParsear($conn, $ctx, $lineasSrc, $itemsPrevios);
     $ids = array_values(array_unique(array_filter(array_column($pl['lineas'], 'id_item'))));
     $items = [];
     if ($ids) {
@@ -389,15 +416,28 @@ function crmVentaManualParsear(mysqli $conn, array $ctx, array $src, ?array $lin
 
     return [
         'id_contacto' => $idContacto, 'cliente' => $c['nombre_completo'], 'fecha' => $fecha, 'documento' => $documento, 'lineas' => $lineas,
-        'total' => $pl['suma'], 'unidades' => round(array_sum(array_column($lineas, 'cantidad')), 4),
+        'total' => $pl['suma'], 'unidades' => round(array_sum(array_column($lineas, 'cantidad')), 4), 'oportunidad' => $oportunidad,
     ];
 }
 
-/** Inserta la venta manual ya validada (id_importacion NULL) con sus líneas y deja el historial. Devuelve el id. */
+/** 409 si la oportunidad ya tiene una venta activa (una sola venta por oportunidad), sin contar `$exceptoId`. */
+function crmVentaExigirOportunidadLibre(mysqli $conn, array $ctx, int $idOp, int $exceptoId = 0): void
+{
+    $otra = crmRow($conn, 'SELECT id, documento, fecha FROM crm_ventas WHERE id_sede = ? AND id_oportunidad = ? AND activo = 1 AND id <> ? LIMIT 1',
+        'iii', [$ctx['id_sede'], $idOp, $exceptoId]);
+    if ($otra) authFail(409, 'Esta oportunidad ya tiene su venta registrada (' . ($otra['documento'] ? 'documento «' . $otra['documento'] . '», ' : '')
+        . date('d-m-Y', strtotime($otra['fecha'])) . ')');
+}
+
+/**
+ * Inserta la venta manual ya validada (id_importacion NULL; id_oportunidad si viene de una) con sus líneas y deja el historial: el de la venta y,
+ * si viene de una oportunidad, también el de la oportunidad («venta_registrada»). Devuelve el id.
+ */
 function crmVentaManualGuardar(mysqli $conn, array $ctx, array $v): int
 {
-    crmExec($conn, 'INSERT INTO crm_ventas (id_sede, id_contacto, fecha, documento, total, unidades, id_importacion, created_by, updated_by) VALUES (?, ?, ?, ?, ?, ?, NULL, ?, ?)',
-        'iissddii', [$ctx['id_sede'], $v['id_contacto'], $v['fecha'], $v['documento'], $v['total'], $v['unidades'], $ctx['id_usuario'], $ctx['id_usuario']]);
+    $idOp = $v['oportunidad']['id'] ?? null;
+    crmExec($conn, 'INSERT INTO crm_ventas (id_sede, id_contacto, fecha, documento, total, unidades, id_importacion, id_oportunidad, created_by, updated_by) VALUES (?, ?, ?, ?, ?, ?, NULL, ?, ?, ?)',
+        'iissddiii', [$ctx['id_sede'], $v['id_contacto'], $v['fecha'], $v['documento'], $v['total'], $v['unidades'], $idOp, $ctx['id_usuario'], $ctx['id_usuario']]);
     $id = (int)$conn->insert_id;
     $vals = []; $params = [];
     foreach ($v['lineas'] as $l) {
@@ -408,7 +448,11 @@ function crmVentaManualGuardar(mysqli $conn, array $ctx, array $v): int
         str_repeat('iissdddii', count($v['lineas'])), $params);
     auditRegistro($conn, $ctx['id_sede'], 'crm', 'crm_ventas', $id, 'creado', [
         'origen' => 'manual', 'cliente' => ['id' => $v['id_contacto'], 'nombre' => $v['cliente']], 'fecha' => $v['fecha'], 'documento' => $v['documento'],
-        'lineas' => count($v['lineas']), 'total' => $v['total'],
+        'lineas' => count($v['lineas']), 'total' => $v['total'], 'oportunidad' => $v['oportunidad'],
     ]);
+    if ($idOp !== null) {
+        auditRegistro($conn, $ctx['id_sede'], 'crm', 'crm_oportunidades', $idOp, 'venta_registrada',
+            ['id_venta' => $id, 'documento' => $v['documento'], 'fecha' => $v['fecha'], 'total' => $v['total']]);
+    }
     return $id;
 }
