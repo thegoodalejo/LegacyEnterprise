@@ -2,8 +2,9 @@
 
 > Documento vivo del CRM. Estado: **v1 de contactos** — contactos Persona/Organización con jerarquía, roles configurables,
 > campos personalizados, etiquetas, historial, filtros, búsqueda en relacionados, acciones en lote, vocabulario por empresa
-> y plantillas por nicho, más **reportes PDF/Excel con la marca del cliente** (contactos). Actualizado: 2026-09-25.
-> Oportunidades (embudo), ventas importadas y metas: plan aprobado, ver *Hoja de ruta*. Actividades y cotizaciones: por definir.
+> y plantillas por nicho, más **reportes PDF/Excel con la marca del cliente** y **oportunidades** (embudo configurable, tablero y lista,
+> catálogo de ítems, líneas, notas, cierre con motivo). Actualizado: 2026-09-25.
+> Ventas importadas y metas: plan aprobado, ver *Hoja de ruta*. Actividades y cotizaciones: por definir.
 
 ## Objetivo
 
@@ -68,6 +69,13 @@ una tabla base con un solo espacio de ids y una extensión 1–1 por tipo.
 | `crm_tags_grupos`, `crm_tags` | Catálogo de etiquetas (por **empresa**); grupo opcional; `aplica_a` opcional; color hex libre |
 | `crm_contacto_tags` | Relación contacto ↔ etiqueta: PK `(contacto, tag)` + índice inverso `(tag, contacto)` |
 | `le_H_registros` | **Historial genérico de plataforma** (módulo, tabla, id_registro, usuario, acción, detalle JSON) |
+| `crm_config` | Por **empresa**: moneda (ISO, por defecto COP) y decimales de los montos (migración `005`) |
+| `crm_embudos`, `crm_etapas` | Por **empresa**: embudos y sus etapas (orden, probabilidad 0–100, tipo abierta/ganada/perdida, color) |
+| `crm_motivos_cierre` | Por **empresa**: por qué se gana o se pierde (tipo ganada/perdida) |
+| `crm_catalogo_categorias`, `crm_catalogo_items` | Por **empresa**: lo que se vende (código único opcional, unidad, precio de referencia) |
+| `crm_oportunidades` | Por **sede**: título, contacto (Persona u Organización), persona de contacto, responsable, embudo/etapa, valor, cierre estimado y real, estado, motivo, descripción, `etapa_desde`, `activo` |
+| `crm_oportunidad_lineas`, `crm_oportunidad_notas` | Líneas (ítem o descripción libre × cantidad × precio) y bitácora de notas (borrado lógico) |
+| `crm_oportunidad_valores`, `crm_oportunidad_tags` | Campos personalizados y etiquetas de las oportunidades (espejo de las de contactos: aquellas tienen FK a `crm_contactos`) |
 
 **Ámbitos.** Los contactos son de una **sede** (`id_sede` siempre sale de la sesión). La configuración (campos,
 etiquetas) es de la **empresa**: todas sus sedes comparten el mismo catálogo.
@@ -163,6 +171,33 @@ por diseño como la de Firebase, y por eso **restringida**. Configurada el 2026-
 
 La API de Google se descarga solo al abrir el selector (`GoogleMapsLoaderService`), nunca con la app.
 
+## Oportunidades y embudo
+
+Una **oportunidad** es una posible venta a un Contacto (Persona u Organización) de la sede, con una persona de contacto opcional. Avanza por las
+**etapas** de un embudo de la empresa; el **tipo** de la etapa decide su estado: *abierta* (en curso), *ganada* o *perdida*. Solo `move_oportunidad`
+cambia la etapa: al entrar en una terminal fija la fecha de cierre y exige **motivo** si la empresa tiene motivos activos de ese tipo; al volver a una
+abierta limpia cierre y motivo. `etapa_desde` guarda cuándo entró a la etapa actual.
+
+- **Valor:** la suma de sus **líneas** (ítem del catálogo o descripción libre, cantidad × precio); sin líneas, el valor que escribe el usuario.
+  **Ponderado** = valor × probabilidad de la etapa (ganada 100 %, perdida 0 %; la app fija esas dos).
+- **Pantalla** `/m/crm/oportunidades`: **tablero** (una columna por etapa con conteo, valor y ponderado; se arrastran tarjetas con `@angular/cdk`,
+  pulsación larga en táctil, o «Mover a…» en el menú de la tarjeta; las 25 primeras por columna y «Ver más») o **lista** (filtros, orden, paginación,
+  selección y lote: etiquetar/quitar, archivar/restaurar). La vista elegida se recuerda en el navegador. Resumen arriba: abiertas, ponderado, ganadas, perdidas.
+- **Filtros:** texto (título, cliente o persona de contacto), estado, embudo, responsable, cliente, cierre estimado desde/hasta, valor mínimo/máximo, etiquetas,
+  campos personalizados de oportunidad y archivadas.
+- **Ficha** `/m/crm/oportunidades/:id`: datos, líneas, notas (edita/elimina su autor o L2+), etiquetas, campos, historial (L2+) y «Mover a…».
+  El perfil del contacto muestra sus oportunidades y permite crear una con el contacto ya elegido (si es una Organización, se propone su persona principal).
+- **Varios embudos:** el modelo los admite; el selector aparece solo cuando hay más de uno. Reglas: no se desactiva un embudo con oportunidades activas
+  ni el último activo; cada embudo conserva al menos una etapa abierta activa; el tipo de una etapa no cambia si ya tiene oportunidades (se crea otra);
+  una etapa con oportunidades activas no se desactiva.
+- **Configuración** (L4, *Ajustes → Embudo* y *Catálogo*): moneda y decimales, embudos, etapas, motivos, categorías e ítems. Los campos personalizados y
+  las etiquetas admiten el destino «Oportunidad» (una etiqueta de oportunidad no se ofrece a contactos, ni al revés). Las plantillas por nicho traen
+  embudo, motivos y un catálogo de ejemplo. Vocabulario: `oportunidad` e `item` («Negocio» no se usa para la oportunidad: en pinturas es la organización).
+- **Reportes:** informe del embudo (tablero, lista, selección o todo): indicadores (abiertas, valor abierto, ponderado de abiertas, ganado, ganadas,
+  perdidas, tasa de cierre), por etapa, por responsable, detalle y, en Excel, hoja de líneas. Ficha PDF/Excel de una oportunidad y catálogo.
+  `crm/export_oportunidades.php` audita `crm_exportar` como contactos.
+- **QA:** `qa-sanitize.sql` reemplaza el texto de notas y descripciones (pueden traer datos personales).
+
 ## Reportes y exportación (PDF / Excel)
 
 **Regla del proyecto:** toda lista o panel del CRM nace con «Exportar» PDF y Excel, y todos los reportes salen del mismo servicio para verse iguales y con la marca del cliente.
@@ -203,30 +238,38 @@ vocabulario ya personalizado ni cambia o borra roles, campos o etiquetas existen
 | Acción | Mínimo |
 |---|---|
 | Ver, crear, editar, etiquetar (uno o en lote) | Acceso al módulo (`requireModulo('crm')`) |
-| Eliminar / restaurar (uno o en lote) | L2 |
-| Ver el historial de un contacto | L2 |
-| Configurar campos, etiquetas, roles y vocabulario; ver y aplicar plantillas | L4 |
+| Crear, editar, mover de etapa y etiquetar oportunidades; agregar notas | Acceso al módulo |
+| Eliminar / restaurar contactos; archivar / restaurar oportunidades (uno o en lote) | L2 |
+| Ver el historial de un contacto o de una oportunidad | L2 |
+| Editar o eliminar una nota ajena | L2 (la propia: su autor) |
+| Configurar campos, etiquetas, roles, vocabulario, moneda, embudos, etapas, motivos y catálogo; ver y aplicar plantillas | L4 |
 
 ## API (`backend/crm/`)
 
 `list_contactos`, `get_contacto`, `save_contacto`, `bulk_contactos`, `set_contacto_tags`, `save_vinculo`,
 `remove_vinculo`, `list_historial`, `list_campos`, `save_campo`, `list_tags`, `save_tag`, `save_tag_grupo`,
 `list_roles`, `save_rol`, `list_vocabulario`, `save_vocabulario`, `list_plantillas`, `apply_plantilla`, `list_responsables`, `export_contactos` (más `reportes/get_marca.php`, compartido por todos los reportes).
-Helpers en `backend/_lib/_crm.php`, `_historial.php` y `_reportes.php`. Todo con `db_prepare_or_fail`, respuesta
+Oportunidades: `list_oportunidades` (`vista` lista o tablero, con resumen), `get_oportunidad`, `save_oportunidad`, `move_oportunidad`, `bulk_oportunidades`,
+`list_notas`, `save_nota`, `export_oportunidades`; configuración: `get_config`, `save_config`, `list_embudos`, `save_embudo`, `save_etapa`, `list_motivos`,
+`save_motivo`, `list_categorias_item`, `save_categoria_item`, `list_items`, `save_item`. `list_historial` acepta `tabla` (`crm_contactos` | `crm_oportunidades`).
+Helpers en `backend/_lib/_crm.php` (los de campos y etiquetas sirven a contactos y oportunidades vía `crmEntidad`), `_crm_oportunidades.php`, `_historial.php` y `_reportes.php`. Todo con `db_prepare_or_fail`, respuesta
 `{action, mensaje, data}` y guardado en transacción. `save_vinculo`/`remove_vinculo` están probados pero la UI v0 edita
 los vínculos desde el formulario de la Organización.
 
 ## Frontend (`/m/crm/…`)
 
-`contactos` (listado + filtros + lote), `contactos/:id` (perfil), `configuracion` (L4: campos, etiquetas, roles, vocabulario y
-plantillas). Diálogos: formulario de contacto, selector de etiquetas (multi, agrupado), historial. Componentes reutilizables:
-`app-contacto-picker` (buscador con autocompletado de un tipo de contacto), `app-tag-chip`, `app-date-input`, `app-export-menu` (botón Exportar).
+`contactos` (listado + filtros + lote), `contactos/:id` (perfil), `oportunidades` (tablero/lista), `oportunidades/:id` (ficha), `configuracion` (L4: campos,
+etiquetas, embudo, catálogo, roles, vocabulario y plantillas; cada pestaña se crea al abrirla). Diálogos: formulario de contacto, de oportunidad, de cierre,
+selector de etiquetas (multi, agrupado, por destino), historial (contactos y oportunidades). Componentes reutilizables:
+`app-contacto-picker` (buscador con autocompletado de un tipo de contacto), `app-item-picker` (ítems del catálogo), `app-campos-form` (campos personalizados),
+`app-tag-chip`, `app-date-input`, `app-export-menu` (botón Exportar). `CrmConfigService.money()` formatea montos con la moneda de la empresa.
 `DialogService.confirm` gana `confirmWord`.
 
 ## Cómo probarlo en local
 
-Migraciones 001–004 + `database/dev-seed-crm.sql` (solo desarrollo, **no** se despliega: usuarios con token conocido,
-61 personas y 20 organizaciones ficticias, con jerarquía y roles, config de los tres pilotos). Login de prueba en dev:
+Migraciones 001–005 + `database/dev-seed-crm.sql` (solo desarrollo, **no** se despliega: usuarios con token conocido,
+61 personas y 20 organizaciones ficticias, con jerarquía y roles, config de los tres pilotos; el embudo y el catálogo se crean aplicando una plantilla
+desde *Ajustes → Plantillas*). Login de prueba en dev:
 `window.__leDev.login('dev-token-l4')` (l5, l4, l2, l1, nocrm, otro). Ver «Desarrollo local» en `pendientes.md`.
 
 ## Límites con otros módulos (propuesta)
@@ -246,7 +289,7 @@ Cada fase se prueba, se despliega y se usa sola. Todo es configurable por empres
 | Fase | Contenido |
 |---|---|
 | **0** ✅ | Servicio de reportes con marca del cliente + exportar contactos (esta sección: *Reportes y exportación*) |
-| **A** | **Oportunidades**: un embudo por empresa configurable (tablas listas para varios), etapas con probabilidad y tipo abierta/ganada/perdida, motivos de cierre; tablero (arrastrar con `@angular/cdk`) + lista; catálogo de ítems (producto/servicio/tratamiento) y líneas por oportunidad; notas; etiquetas y campos personalizados también para oportunidades; vocabulario `oportunidad` e `item`; visibilidad igual que contactos (L2 archiva y ve historial, L4 configura). Migración `005`. |
+| **A** ✅ | **Oportunidades**: un embudo por empresa configurable (tablas listas para varios), etapas con probabilidad y tipo abierta/ganada/perdida, motivos de cierre; tablero (arrastrar con `@angular/cdk`) + lista; catálogo de ítems (producto/servicio/tratamiento) y líneas por oportunidad; notas; etiquetas y campos personalizados también para oportunidades; vocabulario `oportunidad` e `item`; visibilidad igual que contactos (L2 archiva y ve historial, L4 configura). Migración `005`. |
 | **B** | **Ventas importadas** por Excel/CSV: `crm_ventas` + líneas + lotes revertibles + plantillas de mapeo de columnas; la organización se identifica por NIT o código de cliente; pestaña «Ventas» en el perfil de la organización. El navegador lee el archivo y envía bloques al servidor. Migración `006`. |
 | **C** | **Metas paramétricas** (empresa → sede → organización): métricas configurables (ventas en monto o cantidad, filtro por ítem o categoría, oportunidades ganadas, clientes con compra), períodos, avance y «esperado a la fecha»; panel superior en Oportunidades. La meta de la empresa suma las sedes de la empresa y muestra **solo el agregado** a todo el CRM (excepción documentada al aislamiento por sede). Migración `007`. |
 
@@ -258,6 +301,8 @@ Las ventas y las metas viven dentro del CRM; sus tablas se piensan para que un f
 |---|---|
 | 2026-09-25 | Reportes PDF/Excel **en el navegador** con carga diferida (`jspdf`, `jspdf-autotable`, `exceljs`), un `ReportSpec` común y la marca del cliente; el logo llega por `reportes/get_marca.php` (sin configurar CORS en R2) |
 | 2026-09-25 | Toda lista o panel del CRM lleva «Exportar»; la exportación de datos personales se audita (`crm_exportar` en `le_H_admin`) y tiene topes (Excel 20.000 filas, PDF 2.000) |
+| 2026-09-25 | Estado de una oportunidad = tipo de su etapa; cerrar exige motivo solo si la empresa tiene motivos activos; valor = suma de líneas o valor escrito |
+| 2026-09-25 | Campos y etiquetas con destino «oportunidad» en tablas espejo (`crm_oportunidad_valores`/`_tags`); los helpers se generalizan con `crmEntidad` |
 | 2026-09-25 | Oportunidades → ventas importadas → metas, en ese orden y dentro del CRM; en pantalla «Oportunidad» (no «Negocio»); la meta de la empresa se muestra solo como total agregado |
 | 2026-09-24 | CRM parametrizable: núcleo fijo + configuración por empresa |
 | 2026-09-24 | Contacto base con dos tipos, **Persona** y **Organización** (patrón party); "Organización" y no "Empresa" (colisión con el tenant) |
