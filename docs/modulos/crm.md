@@ -3,8 +3,8 @@
 > Documento vivo del CRM. Estado: **v1 de contactos** — contactos Persona/Organización con jerarquía, roles configurables,
 > campos personalizados, etiquetas, historial, filtros, búsqueda en relacionados, acciones en lote, vocabulario por empresa
 > y plantillas por nicho, más **reportes PDF/Excel con la marca del cliente** y **oportunidades** (embudo configurable, tablero y lista,
-> catálogo de ítems, líneas, notas, cierre con motivo), **ventas importadas desde Excel/CSV** (lotes revertibles, análisis por cliente, ítem y mes)
-> y **metas paramétricas** (empresa → sede → organización, con avance, ritmo esperado, generación en lote e informe).
+> catálogo de ítems, líneas, notas, cierre con motivo), **ventas** importadas desde Excel/CSV (lotes revertibles, análisis por cliente, ítem y mes)
+> o **registradas a mano con un carrito** (revisión antes de confirmar, anulación con motivo) y **metas paramétricas** (empresa → sede → organización, con avance, ritmo esperado, generación en lote e informe).
 > Actualizado: 2026-09-25. Actividades y cotizaciones: por definir.
 
 ## Objetivo
@@ -77,7 +77,7 @@ una tabla base con un solo espacio de ids y una extensión 1–1 por tipo.
 | `crm_oportunidades` | Por **sede**: título, contacto (Persona u Organización), persona de contacto, responsable, embudo/etapa, valor, cierre estimado y real, estado, motivo, descripción, `etapa_desde`, `activo` |
 | `crm_oportunidad_lineas`, `crm_oportunidad_notas` | Líneas (ítem o descripción libre × cantidad × precio) y bitácora de notas (borrado lógico) |
 | `crm_oportunidad_valores`, `crm_oportunidad_tags` | Campos personalizados y etiquetas de las oportunidades (espejo de las de contactos: aquellas tienen FK a `crm_contactos`) |
-| `crm_importaciones`, `crm_ventas`, `crm_venta_lineas`, `crm_import_plantillas` | Ventas importadas por lotes (migración `006`, ver *Ventas importadas*) |
+| `crm_importaciones`, `crm_ventas`, `crm_venta_lineas`, `crm_import_plantillas` | Ventas importadas por lotes o registradas a mano (migración `006`, ver *Ventas*) |
 | `crm_metricas`, `crm_metas` | Qué se mide y cuánto se espera de la empresa, la sede o una organización en un período (migración `007`, ver *Metas*) |
 
 **Ámbitos.** Los contactos son de una **sede** (`id_sede` siempre sale de la sesión). La configuración (campos,
@@ -126,7 +126,8 @@ Cada creación, edición, archivado/restauración, cambio de etiquetas y de vín
 el usuario, la fecha y el detalle `[{campo, antes, después}]`. Las acciones en lote llevan un `lote` (uuid) común. **Se
 conserva todo**; el perfil muestra por defecto los **últimos 3 meses** y «Ver anteriores» muestra el resto. Botón
 pequeño de historial (ícono `history`) en la cabecera del perfil. La tabla es genérica: Agenda, Pedidos, etc. la
-reutilizarán con `auditRegistro()`.
+reutilizarán con `auditRegistro()`. Las ventas también la usan (`tabla = crm_ventas`: registrada a mano, anulada, restaurada, reemplazada por una
+importación) y la muestran en el detalle de cada venta (ver *Ventas → Venta manual*).
 
 ## Filtros y búsqueda
 
@@ -201,23 +202,29 @@ abierta limpia cierre y motivo. `etapa_desde` guarda cuándo entró a la etapa a
   `crm/export_oportunidades.php` audita `crm_exportar` como contactos.
 - **QA:** `qa-sanitize.sql` reemplaza el texto de notas y descripciones (pueden traer datos personales).
 
-## Ventas importadas (Excel / CSV)
+## Ventas (importadas desde Excel / CSV o registradas a mano)
 
-Las ventas reales del cliente (facturas, remisiones) llegan al CRM desde un archivo que exporta su sistema contable o ERP. Son la base de los
-**indicadores de venta** por cliente, ítem y mes y, en la fase C, del avance de las **metas**. No hay módulo de facturación todavía: las tablas
-(`crm_ventas`, `crm_venta_lineas`) se pensaron para que un módulo futuro de Ventas/Facturación escriba en las mismas (`id_importacion` NULL = venta
-creada por otro medio).
+Las ventas reales del cliente (facturas, remisiones) llegan al CRM de dos formas: desde un **archivo** que exporta su sistema contable o ERP
+(*importación*, por lotes revertibles) o **escritas a mano**, una por una, en un **carrito** (*venta manual*: el negocio que no tiene ERP, o la venta
+que no vino en el archivo). Las dos van a las mismas tablas y son la base de los **indicadores de venta** por cliente, ítem y mes y del avance de las
+**metas**. No hay módulo de facturación todavía: las tablas (`crm_ventas`, `crm_venta_lineas`) se pensaron para que un módulo futuro de
+Ventas/Facturación escriba en las mismas. `id_importacion` NULL = venta que no vino de un archivo (hoy, la manual).
 
 ### Modelo (migración `006_crm_ventas.sql`)
 
 | Tabla | Contenido |
 |---|---|
 | `crm_importaciones` | Un **lote** por archivo cargado (por **sede**): archivo, estado (`procesando` → `completa` o `revertida`), opciones y mapeo con que se leyó, contadores (filas totales/ok/error, ventas nuevas/reemplazadas/omitidas, ítems creados), valor total, rango de fechas, las primeras 200 filas con error `[{fila, motivo}]`, quién y cuándo lo revirtió |
-| `crm_ventas` | Una venta = un documento de un **Contacto** de la sede (Organización o Persona) en una fecha: número de documento (opcional), total (= suma de líneas), unidades (= suma de cantidades), lote, `activo` (0 = revertida o reemplazada) |
-| `crm_venta_lineas` | Ítem del catálogo si el código se reconoce; si no, el código y la descripción tal como vinieron; cantidad, precio unitario, total |
+| `crm_ventas` | Una venta = un documento de un **Contacto** de la sede (Organización o Persona) en una fecha: número de documento (opcional), total (= suma de líneas), unidades (= suma de cantidades), lote (**NULL = registrada a mano**), `activo` (0 = revertida, reemplazada o anulada) |
+| `crm_venta_lineas` | Ítem del catálogo si el código se reconoce; si no, el código y la descripción tal como vinieron (en la venta manual: el código y el nombre del ítem en ese momento, o la descripción de la línea libre); cantidad, precio unitario, total |
 | `crm_import_plantillas` | Por **empresa**: cómo leer el archivo de cada mes (columnas, fila de encabezado, formato de fecha, separador decimal y opciones), con nombre |
 
-Nada se borra: revertir o reemplazar deja `activo = 0` y todos los indicadores cuentan solo las ventas activas.
+Nada se borra: revertir un lote, reemplazar una factura o anular una venta manual deja `activo = 0`, y todos los indicadores y las metas cuentan solo las
+ventas activas. La venta manual **no necesitó migración**: usa `id_importacion` NULL, que la `006` ya había previsto.
+
+**Historial por venta** (`le_H_registros`, `tabla = crm_ventas`): `creado` (solo la manual: origen, cliente, fecha, documento, líneas y total),
+`anulado` (con el motivo), `restaurado` y `reemplazado` (cuando una importación con «reemplazar» la desactiva: guarda el `id_importacion`; aplica a
+importadas y manuales). La simulación de una importación no deja historial (se revierte con su transacción).
 
 ### Formato del archivo
 
@@ -255,25 +262,76 @@ Nada se borra: revertir o reemplazar deja `activo = 0` y todos los indicadores c
    progreso (`bloque`, cada uno en su transacción) y se cierra (`finalizar`, auditado como `crm_importar_ventas` en `le_H_admin`). Las filas con error se
    omiten; el resto se guarda. Si la importación se corta a mitad, lo cargado queda en un lote «En proceso» que se puede revertir.
 
+### Venta manual — carrito (`/m/crm/ventas` → «Nueva venta», o perfil del contacto → «Registrar venta»; L2+)
+
+Para registrar una venta sin archivo: se arma como un carrito de compras, se revisa y al final se confirma.
+
+1. **Cliente:** Organización o Persona **activa** de la sede (buscador con alternador Organización/Persona). Desde el perfil del contacto viene puesto.
+2. **Fecha:** hoy por defecto (dd-mm-aaaa). No puede ser futura (el servidor acepta hasta mañana por la diferencia horaria, igual que la importación) ni
+   anterior a 1990.
+3. **Número de factura o remisión** (opcional, hasta 60): no puede repetir el de otra venta **activa** de la sede, importada o manual, sin distinguir
+   mayúsculas (la misma regla con que la importación detecta duplicados). Si está tomado: 409 «Ya hay una venta activa con el documento «M-001»
+   (cliente, dd-mm-aaaa)». Sin número no hay con qué comparar y se permite.
+4. **Catálogo** (columna izquierda; arriba en móvil): los ítems **activos** de la empresa, 20 por página con «Ver más», búsqueda por nombre o código y
+   filtro por categoría. Tocar un ítem lo agrega con cantidad 1 y su **precio de referencia** (editable); tocarlo otra vez **suma 1** a esa línea (una
+   insignia en la lista muestra cuántos van). **Línea libre:** descripción escrita, sin ítem (queda «sin ítem del catálogo», como en la importación).
+   Desde el carrito no se crean ítems: el catálogo es de L4 (*Configuración → Catálogo*).
+5. **Carrito** (columna derecha): por línea, cantidad con − / + o escrita (con decimales: 2,5 galones), precio unitario y total (cantidad × precio);
+   quitar línea. Los números se leen con el formato del idioma (`parseNumero`): en español `78.000` = setenta y ocho mil y `1,5` = uno y medio; el
+   precio de referencia entra ya formateado (`14.500`). El **pie del diálogo** muestra siempre el total, las líneas y las unidades.
+6. Mientras falte algo, un aviso dice lo primero que falta (cliente, fecha, fecha futura, al menos una línea, descripción de las líneas libres,
+   cantidades > 0, precio de cada línea, precios ≥ 0) y «Revisar venta» queda deshabilitado. Un campo marca error solo si lo escrito no es un número.
+7. **Revisar venta:** `save_venta.php` con `validar=1` corre **todas** las validaciones del servidor dentro de una transacción que se revierte (no se
+   guarda nada): así un número repetido, un cliente archivado o un ítem desactivado entre tanto aparecen antes del resumen, y el carrito sigue abierto.
+   El **resumen** muestra cliente, fecha, factura, líneas (ítem/código o «sin ítem del catálogo»), unidades y total, y avisa que la venta cuenta de
+   inmediato en indicadores y metas. «Volver al carrito» conserva todo.
+8. **Confirmar venta:** `save_venta.php` la guarda en una transacción (venta + líneas + historial `creado`). Aviso «Venta registrada» con total y cliente;
+   la pantalla de ventas pasa a la pestaña *Ventas*; en el perfil se recargan la tarjeta de ventas y la de **metas** (el avance cambia al instante).
+9. **Cerrar sin guardar:** con líneas en el carrito, Esc, tocar fuera o «Cancelar» preguntan «¿Descartar la venta?».
+
+**Reglas de las líneas:** las mismas de una oportunidad (`crmOpLineasParsear`): hasta 100 líneas; ítem **activo** de la empresa o descripción;
+cantidad mayor que 0; precio ≥ 0 (0 = obsequio); total = cantidad × precio redondeado a 2 decimales; total de la venta = suma de líneas; `unidades` = suma de cantidades
+(sirve a las metas por unidades). A las líneas del catálogo se les guarda también el código y el nombre del ítem de ese momento: si el ítem se renombra,
+el detalle muestra el nombre actual; si llegara a faltar, queda el guardado.
+
+**Anular y restaurar** (detalle de la venta, L2+, **solo ventas manuales**): «Anular venta» pide un **motivo** (obligatorio, hasta 255) y deja
+`activo = 0`: deja de contar en indicadores y metas al instante, sin borrarse. «Restaurar venta» la reactiva si su número de documento sigue libre (409 si
+otra venta activa lo tomó mientras tanto). Una venta **importada** no se anula sola (409: se revierte su importación completa). El detalle muestra
+«Registrada a mano el … por …» y el **historial** (registrada, anulada con su motivo, restaurada, reemplazada por una importación). Cerrar el detalle
+después de anular o restaurar recarga la lista o el perfil que lo abrió.
+
+**Convivencia con la importación:** el número de documento es uno solo para las dos. Una importación con «reemplazar» puede reemplazar una venta manual
+con el mismo número (queda inactiva, con «Reemplazada por la importación «archivo»» en su historial); una venta manual no puede usar el número de una
+importada activa. Así, cargar después el archivo del ERP con la misma factura no la cuenta dos veces.
+
+**Qué no hace (v1), a propósito:** no edita una venta ya registrada (se anula con motivo y se registra de nuevo: queda el rastro); no maneja descuentos
+por línea (se escribe el precio neto); no calcula impuestos ni numera facturas. Es un registro comercial para indicadores y metas, no un documento
+fiscal (eso sería el futuro módulo de Facturación).
+
 ### Pantalla de ventas (`/m/crm/ventas`, cualquiera con acceso al CRM)
 
+- **Acciones** (L2+): «Nueva venta» (carrito, ver arriba) e «Importar ventas».
 - **Filtros:** período (este mes, mes anterior, este trimestre, este año —por defecto—, últimos 12 meses, todo o rango), búsqueda (número de documento
-  o cliente), categoría, cliente (con o sin sus **dependientes**: una matriz suma las ventas de sus puntos de venta), ítem e importación.
+  o cliente), categoría, **origen** (todas, registradas a mano, importadas), **estado** (activas —por defecto—, anuladas o revertidas, todas), cliente
+  (con o sin sus **dependientes**: una matriz suma las ventas de sus puntos de venta), ítem e importación. Origen y estado también van al texto de
+  filtros del reporte.
 - **Indicadores:** total vendido, número de ventas, clientes con compra, ticket promedio y unidades.
 - **Pestañas:** *Por cliente* (ventas, última compra, total y barra; clic abre el perfil), *Por ítem* (cantidad y total; las líneas sin ítem se agrupan
-  por código/descripción; clic filtra las ventas de ese ítem), *Por mes* (barras), *Ventas* (detalle; clic abre la venta con sus líneas y el archivo
-  de origen) e *Importaciones* (lotes con contadores, errores, «Ver sus ventas» y **Revertir**, L2+).
+  por código/descripción; clic filtra las ventas de ese ítem), *Por mes* (barras), *Ventas* (detalle; las manuales llevan la marca «Manual» y, con el
+  filtro de estado, las inactivas «Anulada» o «Revertida»; clic abre la venta con sus líneas, su origen y su historial) e *Importaciones* (lotes con contadores, errores, «Ver sus ventas» y **Revertir**, L2+).
 - **Revertir un lote:** sus ventas quedan inactivas y el lote pasa a «Revertida» (auditado como `crm_revertir_importacion`). Las ventas que ese lote
   había **reemplazado no se reactivan solas** (pudieron cambiar después): si hace falta, se vuelve a importar el archivo anterior.
 - **Perfil del contacto:** tarjeta «Ventas (últimos 12 meses)» con total, número de ventas, última compra y las 3 más recientes (una organización con
-  dependientes suma las de ellos).
+  dependientes suma las de ellos) y, para L2+ con el contacto activo, «Registrar venta» (el carrito con el cliente puesto).
 - **Reporte** (`export_ventas.php`, auditado `crm_exportar`): indicadores, por mes, por categoría (con participación), principales 25 clientes e ítems;
-  en Excel además hojas completas *Por cliente*, *Por ítem*, *Ventas* y *Líneas*. Tope del PDF: 2.000 ventas (se pide Excel).
+  en Excel además hojas completas *Por cliente*, *Por ítem*, *Ventas* (con columna *Origen*: el archivo de la importación o «Manual») y *Líneas*.
+  Tope del PDF: 2.000 ventas (se pide Excel).
 
 ### Permisos
 
-Ver ventas, filtros y reportes: acceso al módulo. **Importar, revertir y guardar plantillas: L2** (las ventas alimentan las metas; se cambia con un
-`requireRole` en `import_ventas.php`, `revertir_importacion.php` y `save_import_plantilla.php`).
+Ver ventas, su detalle e historial, filtros y reportes: acceso al módulo. **Importar, revertir, guardar plantillas, registrar ventas a mano y anular o
+restaurar las manuales: L2** (las ventas alimentan las metas; se cambia con un `requireRole` en `import_ventas.php`, `revertir_importacion.php`,
+`save_import_plantilla.php`, `save_venta.php` y `anular_venta.php`; en pantalla, `puedeImportar` en `ventas.page.ts` y `canAudit` en el perfil).
 
 ### Pruebas
 
@@ -282,12 +340,23 @@ tres modos, NIT con puntos y sin dígito de verificación, errores por fila, sim
 vistas, permisos y aislamiento entre sedes) y Playwright con un `.xlsx` real (título antes del encabezado, 83 filas, cliente inexistente y fecha rota)
 y un CSV Windows-1252 con `;` y coma decimal reconocido por nombre.
 
+**Venta manual** (2026-09-25): API con 57 casos contra el backend local (permisos L1/L2; cliente vacío, archivado y Persona; fechas futura, de mañana,
+mal escrita, vacía y anterior a 1990; líneas vacías, sin ítem ni descripción, cantidad 0, precio negativo o 0, ítem inexistente y desactivado;
+validar sin escribir; totales, unidades, snapshot de código y nombre; historial; efecto inmediato en metas de dinero y de unidades; documento repetido
+con otra mayúscula; anular sin motivo, dos veces, desde otra empresa; restaurar con el número ocupado; reemplazo por importación con historial;
+simulación sin historial; una importada no se anula sola; filtros de origen y estado; exportación con origen). Las baterías anteriores de ventas (51) y
+metas (82) siguen pasando. Playwright 1280 y 375: carrito completo (búsqueda, suma al tocar dos veces, línea libre con foco, `78.000` y `1,5`,
+avisos), revisión sin escritura, volver y confirmar, marca «Manual», detalle con historial, anular con motivo, filtro de estado, restaurar, filtro de
+origen, número repetido sin salir del carrito, confirmación al descartar, registro desde el perfil con la meta recargada, móvil sin scroll horizontal,
+L1 sin botones; sin errores de consola (fuera del 409 que la prueba provoca a propósito).
+
 ## Metas (fase C)
 
 Las metas dicen **cuánto** se espera lograr, **de quién** y **en qué período**, y el CRM muestra cómo va cada una contra el ritmo esperado a la fecha.
 Son **paramétricas**: cada empresa define primero **qué se mide** (una *métrica*: pesos vendidos, galones de un producto, pacientes atendidos,
 contratos ganados…) y después le pone metas a la empresa, a la sede y a cada organización. El **avance no se guarda**: se calcula al consultar desde
-las ventas importadas y las oportunidades, así que siempre refleja lo último cargado (una importación o una reversión cambian el avance al instante).
+las ventas (importadas o registradas a mano) y las oportunidades, así que siempre refleja lo último cargado (una importación, una venta manual, una
+anulación o una reversión cambian el avance al instante).
 
 ### Modelo (migración `007_crm_metas.sql`)
 
@@ -465,6 +534,7 @@ Desde las fases A–C también traen embudo con etapas, motivos de cierre, un ca
 | Editar o eliminar una nota ajena | L2 (la propia: su autor) |
 | Ver ventas, sus análisis y reportes | Acceso al módulo |
 | Importar ventas, revertir importaciones y guardar plantillas de mapeo | L2 |
+| Registrar ventas a mano (carrito); anular y restaurar las manuales | L2 |
 | Ver metas (panel, página, perfil) y exportar su informe | Acceso al módulo |
 | Crear, editar, eliminar y generar metas; configurar métricas | L4 |
 | Configurar campos, etiquetas, roles, vocabulario, moneda, embudos, etapas, motivos y catálogo; ver y aplicar plantillas | L4 |
@@ -477,8 +547,10 @@ Desde las fases A–C también traen embudo con etapas, motivos de cierre, un ca
 Oportunidades: `list_oportunidades` (`vista` lista o tablero, con resumen), `get_oportunidad`, `save_oportunidad`, `move_oportunidad`, `bulk_oportunidades`,
 `list_notas`, `save_nota`, `export_oportunidades`; configuración: `get_config`, `save_config`, `list_embudos`, `save_embudo`, `save_etapa`, `list_motivos`,
 `save_motivo`, `list_categorias_item`, `save_categoria_item`, `list_items`, `save_item`. `list_historial` acepta `tabla` (`crm_contactos` | `crm_oportunidades`).
-Ventas: `list_ventas` (`vista` lista, clientes, items, categorias o meses; siempre con resumen), `get_venta`, `import_ventas` (`accion` simular, iniciar, bloque o
-finalizar), `list_importaciones`, `revertir_importacion`, `list_import_plantillas`, `save_import_plantilla`, `export_ventas`.
+Ventas: `list_ventas` (`vista` lista, clientes, items, categorias o meses; siempre con resumen; filtros también `origen` manual|importada y `estado`
+activas|inactivas|todas), `get_venta` (con `historial`), `save_venta` (venta manual; `validar=1` revisa sin guardar), `anular_venta` (`accion` anular
+—con `motivo`— o restaurar; solo manuales), `import_ventas` (`accion` simular, iniciar, bloque o finalizar), `list_importaciones`, `revertir_importacion`,
+`list_import_plantillas`, `save_import_plantilla`, `export_ventas` (`lote` NULL = manual).
 Metas: `list_metricas`, `save_metrica`, `list_metas` (`vista` lista —filtros, corte, orden, conteo por estado—, panel —tres niveles de un día— o
 referencia —real actual, del período anterior y del mismo período del año anterior—), `save_meta`, `generar_metas` (`accion` simular o guardar), `export_metas`.
 Helpers en `backend/_lib/_crm.php` (los de campos y etiquetas sirven a contactos y oportunidades vía `crmEntidad`), `_crm_oportunidades.php`, `_crm_ventas.php`, `_crm_metas.php`, `_historial.php` y `_reportes.php`. Todo con `db_prepare_or_fail`, respuesta
@@ -488,10 +560,11 @@ los vínculos desde el formulario de la Organización.
 ## Frontend (`/m/crm/…`)
 
 `contactos` (listado + filtros + lote), `contactos/:id` (perfil), `oportunidades` (panel de metas + tablero/lista), `oportunidades/:id` (ficha), `ventas` (análisis, detalle,
-importaciones y asistente de importación), `metas` (mes a mes: panel de tres niveles y tabla de organizaciones), `configuracion` (L4: campos,
+importaciones, asistente de importación y carrito de venta manual), `metas` (mes a mes: panel de tres niveles y tabla de organizaciones), `configuracion` (L4: campos,
 etiquetas, embudo, catálogo, métricas, roles, vocabulario y plantillas; cada pestaña se crea al abrirla). Metas: `app-metas-panel` (compacto o completo),
 diálogos de meta y de generación, `app-meta-bar`, `app-meta-estado` y `app-periodo-picker` (`pages/crm/metas-ui.ts`), funciones de período en `metas-periodo.ts`
-y `parseNumero` (`crm-format.ts`: `25.000.000` / `1.234,5` según el idioma). Diálogos: formulario de contacto, de oportunidad, de cierre,
+y `parseNumero` (`crm-format.ts`: `25.000.000` / `1.234,5` según el idioma). Diálogos: formulario de contacto, de oportunidad, de cierre, carrito de venta manual (`venta-manual-dialog.component.ts`,
+`abrirVentaManualDialog`), detalle de venta con anular/restaurar e historial (`venta-dialog.component.ts`, se cierra con `true` si cambió),
 selector de etiquetas (multi, agrupado, por destino), historial (contactos y oportunidades). Componentes reutilizables:
 `app-contacto-picker` (buscador con autocompletado de un tipo de contacto), `app-item-picker` (ítems del catálogo), `app-campos-form` (campos personalizados),
 `app-tag-chip`, `app-date-input`, `app-export-menu` (botón Exportar). `CrmConfigService.money()` formatea montos con la moneda de la empresa.
@@ -524,6 +597,7 @@ Cada fase se prueba, se despliega y se usa sola. Todo es configurable por empres
 | **0** ✅ | Servicio de reportes con marca del cliente + exportar contactos (esta sección: *Reportes y exportación*) |
 | **A** ✅ | **Oportunidades**: un embudo por empresa configurable (tablas listas para varios), etapas con probabilidad y tipo abierta/ganada/perdida, motivos de cierre; tablero (arrastrar con `@angular/cdk`) + lista; catálogo de ítems (producto/servicio/tratamiento) y líneas por oportunidad; notas; etiquetas y campos personalizados también para oportunidades; vocabulario `oportunidad` e `item`; visibilidad igual que contactos (L2 archiva y ve historial, L4 configura). Migración `005`. |
 | **B** ✅ | **Ventas importadas** por Excel/CSV: `crm_ventas` + líneas + lotes revertibles + plantillas de mapeo de columnas; la organización se identifica por NIT o código de cliente; pestaña «Ventas» en el perfil de la organización. El navegador lee el archivo y envía bloques al servidor. Migración `006`. |
+| **B.1** ✅ | **Venta manual (carrito)**: registrar una venta sin archivo desde *Ventas* o el perfil del contacto, con catálogo, líneas libres, revisión en el servidor sin guardar y confirmación; anular con motivo y restaurar; filtros de origen y estado; historial por venta. Sin migración (`id_importacion` NULL). Ver *Ventas → Venta manual*. |
 | **C** ✅ | **Metas paramétricas** (empresa → sede → organización): métricas configurables (ventas en monto o cantidad, filtro por ítem o categoría, oportunidades ganadas, clientes con compra), períodos, avance y «esperado a la fecha»; panel superior en Oportunidades, página de metas, generación en lote e informe. La meta de la empresa suma las sedes de la empresa y muestra **solo el agregado** a todo el CRM (excepción documentada al aislamiento por sede). Migración `007` (ver *Metas*). |
 
 Las ventas y las metas viven dentro del CRM; sus tablas se piensan para que un futuro módulo de Ventas/Facturación escriba en las mismas.
@@ -532,6 +606,9 @@ Las ventas y las metas viven dentro del CRM; sus tablas se piensan para que un f
 
 | Fecha | Decisión |
 |---|---|
+| 2026-09-25 | Venta manual en las **mismas tablas** que la importada (`id_importacion` NULL), sin migración; registrar, anular y restaurar = **L2**, como importar (las ventas alimentan las metas) |
+| 2026-09-25 | Venta manual **sin edición**: se anula con motivo obligatorio y se registra de nuevo (queda rastro); solo las manuales se anulan una por una, las importadas se revierten por lote |
+| 2026-09-25 | Número de documento único entre las ventas **activas** de la sede para importadas y manuales (una importación con «reemplazar» puede reemplazar una manual); «Revisar venta» valida en el servidor con transacción revertida antes del resumen |
 | 2026-09-25 | Metas: la **métrica** (qué se mide: fuente fija en código + filtro opcional por ítem o categoría) va aparte de la **meta** (cuánto, de quién, cuándo); el avance se calcula al consultar, no se guarda |
 | 2026-09-25 | Sin «meta padre»: empresa → sede → organizaciones se arma por métrica y período; la **cobertura** avisa si las metas de abajo no alcanzan. Una organización suma sus dependientes directos; en sumas de grupo no se cuenta dos veces |
 | 2026-09-25 | Ritmo **lineal** (hoy no cuenta si el corte es hoy); «en riesgo» con ≥ 90 % de lo esperado; mirar un mes pasado corta los datos en su último día |
@@ -572,7 +649,9 @@ aviso, no bloqueo; búsqueda v0 no tolera errores de tipeo; tope de 5.000 por lo
    meta (ya se guarda en `le_H_registros`) y la lista de eliminadas (hoy se restaura creándola de nuevo); avisos cuando una meta pasa a atrasada;
    gráficos en el informe; metas por organización cargadas desde Excel.
 1b. Ventas: reactivar automáticamente lo que un lote revertido había reemplazado; leer `.xls` antiguos; cerrar solos los lotes «En proceso» abandonados
-   (hoy se revierten a mano); ventas creadas a mano (hoy solo por archivo; llegarán con Pedidos/Facturación).
+   (hoy se revierten a mano). Venta manual ✅ (2026-09-25), mejoras posibles: editar una venta manual (hoy se anula y se registra de nuevo); descuento
+   por línea; registrar como venta una **oportunidad ganada** con sus líneas; numeración automática opcional para quien no tiene factura; guardar el
+   carrito sin terminar (borrador).
 2. **Orden por columna** en el listado (el backend ya lo soporta: `orden`, `dir`).
 3. **Datos personales**: autorización de tratamiento por contacto; en la clínica, la historia clínica queda fuera del CRM.
 4. **Purga del historial** (política de retención a largo plazo, si se necesita).
