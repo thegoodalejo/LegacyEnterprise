@@ -3,8 +3,8 @@
 > Documento vivo del CRM. Estado: **v1 de contactos** — contactos Persona/Organización con jerarquía, roles configurables,
 > campos personalizados, etiquetas, historial, filtros, búsqueda en relacionados, acciones en lote, vocabulario por empresa
 > y plantillas por nicho, más **reportes PDF/Excel con la marca del cliente** y **oportunidades** (embudo configurable, tablero y lista,
-> catálogo de ítems, líneas, notas, cierre con motivo). Actualizado: 2026-09-25.
-> Ventas importadas y metas: plan aprobado, ver *Hoja de ruta*. Actividades y cotizaciones: por definir.
+> catálogo de ítems, líneas, notas, cierre con motivo) y **ventas importadas desde Excel/CSV** (lotes revertibles, análisis por cliente, ítem y mes).
+> Actualizado: 2026-09-25. Metas: plan aprobado, ver *Hoja de ruta*. Actividades y cotizaciones: por definir.
 
 ## Objetivo
 
@@ -198,6 +198,87 @@ abierta limpia cierre y motivo. `etapa_desde` guarda cuándo entró a la etapa a
   `crm/export_oportunidades.php` audita `crm_exportar` como contactos.
 - **QA:** `qa-sanitize.sql` reemplaza el texto de notas y descripciones (pueden traer datos personales).
 
+## Ventas importadas (Excel / CSV)
+
+Las ventas reales del cliente (facturas, remisiones) llegan al CRM desde un archivo que exporta su sistema contable o ERP. Son la base de los
+**indicadores de venta** por cliente, ítem y mes y, en la fase C, del avance de las **metas**. No hay módulo de facturación todavía: las tablas
+(`crm_ventas`, `crm_venta_lineas`) se pensaron para que un módulo futuro de Ventas/Facturación escriba en las mismas (`id_importacion` NULL = venta
+creada por otro medio).
+
+### Modelo (migración `006_crm_ventas.sql`)
+
+| Tabla | Contenido |
+|---|---|
+| `crm_importaciones` | Un **lote** por archivo cargado (por **sede**): archivo, estado (`procesando` → `completa` o `revertida`), opciones y mapeo con que se leyó, contadores (filas totales/ok/error, ventas nuevas/reemplazadas/omitidas, ítems creados), valor total, rango de fechas, las primeras 200 filas con error `[{fila, motivo}]`, quién y cuándo lo revirtió |
+| `crm_ventas` | Una venta = un documento de un **Contacto** de la sede (Organización o Persona) en una fecha: número de documento (opcional), total (= suma de líneas), unidades (= suma de cantidades), lote, `activo` (0 = revertida o reemplazada) |
+| `crm_venta_lineas` | Ítem del catálogo si el código se reconoce; si no, el código y la descripción tal como vinieron; cantidad, precio unitario, total |
+| `crm_import_plantillas` | Por **empresa**: cómo leer el archivo de cada mes (columnas, fila de encabezado, formato de fecha, separador decimal y opciones), con nombre |
+
+Nada se borra: revertir o reemplazar deja `activo = 0` y todos los indicadores cuentan solo las ventas activas.
+
+### Formato del archivo
+
+- **Excel (.xlsx)** o **CSV** (`.csv` o `.txt`). Los `.xls` de Excel 97-2003 no se leen (se pide guardarlos como `.xlsx`). Tope: 25 MB.
+- **Una fila por cada línea vendida** (producto o servicio). Las filas con el mismo **número de documento** se agrupan en una venta; sin esa
+  columna se agrupan por **cliente + fecha**. Si una misma factura aparece con otro cliente u otra fecha, esas filas se marcan con error.
+- **Obligatorio:** fecha, cliente y (precio unitario **o** total de la línea). **Opcional:** número de documento, código y descripción del ítem,
+  cantidad (1 si no viene). Si falta el total se calcula cantidad × precio; si falta el precio, total ÷ cantidad.
+- **CSV:** el separador se detecta solo (`;`, `,`, tabulador o `|`), respeta comillas y saltos de línea entre comillas; la codificación se detecta
+  (UTF-8 con o sin BOM; si no es UTF-8 válido, Windows-1252, que es lo que exporta Excel en español como «CSV»).
+- **Excel:** se leen todas las hojas con datos (se elige cuál); fórmulas (su resultado), texto enriquecido, hipervínculos y fechas reales.
+- **Fechas:** celdas de fecha de Excel, número de serie de Excel o texto en el formato elegido (dd/mm/aaaa, aaaa-mm-dd o mm/dd/aaaa, con `/`, `-`, `.`
+  o espacio; años de dos dígitos). `aaaa-mm-dd` siempre se acepta. Se rechazan fechas imposibles (31/02) y futuras (más de un día adelante).
+- **Números:** con separador decimal **coma** (`1.234.567,89`) o **punto** (`1,234,567.89`); se ignoran `$`, espacios y `COP`/`USD`; `(1.500)` es negativo.
+- **Formato de ejemplo:** el asistente descarga un `.xlsx` con los encabezados que se reconocen solos y dos filas de muestra.
+
+### Asistente de importación (`/m/crm/ventas` → «Importar ventas», L2+)
+
+1. **Archivo:** arrastrar o elegir. El archivo **nunca se sube entero**: el navegador lo lee (ExcelJS con carga diferida para `.xlsx`).
+2. **Columnas y opciones:** se detecta la fila del encabezado (la primera con dos o más celdas con texto: salta títulos) y se **proponen las columnas**
+   por el nombre del encabezado, sin tildes ni mayúsculas (p. ej. «Fecha factura», «NIT», «No. Factura», «Vr. Unitario», «Valor total»). La vista
+   previa muestra las primeras 8 filas **ya interpretadas** y marca en rojo lo que no se puede leer. Opciones:
+   - **Reconocer al cliente por:** *documento o NIT* (compara solo dígitos, con y sin dígito de verificación: `901.142.687-7` = `901142687-7` =
+     `901142687`), *nombre exacto* (sin distinguir mayúsculas ni tildes) o *un campo personalizado* de texto o número entero de Personas u
+     Organizaciones (p. ej. «Código de cliente» del ERP). Si varios contactos coinciden y solo uno está activo, se usa ese; si no, la fila es error.
+   - **Código fuera del catálogo:** cargar la línea sin ítem (queda el código y la descripción del archivo) o **crear el ítem** (nombre = descripción,
+     precio de referencia = precio de la línea).
+   - **Factura ya cargada** (mismo número entre las ventas activas de la sede, sin distinguir mayúsculas): *dejar la que está* (se cuenta como
+     omitida) o *reemplazarla* (la anterior queda inactiva y entra la del archivo). Así se vuelve a cargar un mes corregido.
+   - **Plantillas:** el mapeo y las opciones se guardan con un nombre por empresa y se reutilizan cada mes (guardar con el mismo nombre la sobrescribe).
+3. **Revisión:** el servidor procesa **todo** el archivo dentro de una transacción que se revierte (`accion=simular`): nada queda guardado. Muestra
+   filas leídas, ventas nuevas, reemplazos, ya cargadas, ítems nuevos, filas con error, valor y rango de fechas, la lista de **clientes que no se
+   encontraron** (para crearlos o corregir cómo se reconocen) y cada fila con error con su número de fila del archivo y el motivo.
+4. **Importación:** se crea el lote (`iniciar`), se mandan **bloques** de hasta 400 ventas / 2.500 líneas (el servidor acepta 500 / 3.000) con barra de
+   progreso (`bloque`, cada uno en su transacción) y se cierra (`finalizar`, auditado como `crm_importar_ventas` en `le_H_admin`). Las filas con error se
+   omiten; el resto se guarda. Si la importación se corta a mitad, lo cargado queda en un lote «En proceso» que se puede revertir.
+
+### Pantalla de ventas (`/m/crm/ventas`, cualquiera con acceso al CRM)
+
+- **Filtros:** período (este mes, mes anterior, este trimestre, este año —por defecto—, últimos 12 meses, todo o rango), búsqueda (número de documento
+  o cliente), categoría, cliente (con o sin sus **dependientes**: una matriz suma las ventas de sus puntos de venta), ítem e importación.
+- **Indicadores:** total vendido, número de ventas, clientes con compra, ticket promedio y unidades.
+- **Pestañas:** *Por cliente* (ventas, última compra, total y barra; clic abre el perfil), *Por ítem* (cantidad y total; las líneas sin ítem se agrupan
+  por código/descripción; clic filtra las ventas de ese ítem), *Por mes* (barras), *Ventas* (detalle; clic abre la venta con sus líneas y el archivo
+  de origen) e *Importaciones* (lotes con contadores, errores, «Ver sus ventas» y **Revertir**, L2+).
+- **Revertir un lote:** sus ventas quedan inactivas y el lote pasa a «Revertida» (auditado como `crm_revertir_importacion`). Las ventas que ese lote
+  había **reemplazado no se reactivan solas** (pudieron cambiar después): si hace falta, se vuelve a importar el archivo anterior.
+- **Perfil del contacto:** tarjeta «Ventas (últimos 12 meses)» con total, número de ventas, última compra y las 3 más recientes (una organización con
+  dependientes suma las de ellos).
+- **Reporte** (`export_ventas.php`, auditado `crm_exportar`): indicadores, por mes, por categoría (con participación), principales 25 clientes e ítems;
+  en Excel además hojas completas *Por cliente*, *Por ítem*, *Ventas* y *Líneas*. Tope del PDF: 2.000 ventas (se pide Excel).
+
+### Permisos
+
+Ver ventas, filtros y reportes: acceso al módulo. **Importar, revertir y guardar plantillas: L2** (las ventas alimentan las metas; se cambia con un
+`requireRole` en `import_ventas.php`, `revertir_importacion.php` y `save_import_plantilla.php`).
+
+### Pruebas
+
+`import-parse.spec.ts` (CSV, codificación, fechas, números, mapeo automático, agrupación y bloques). A mano: API con 51 casos (reconocimiento en los
+tres modos, NIT con puntos y sin dígito de verificación, errores por fila, simulación sin escritura, ítems nuevos, omitir/reemplazar, lotes, reversión,
+vistas, permisos y aislamiento entre sedes) y Playwright con un `.xlsx` real (título antes del encabezado, 83 filas, cliente inexistente y fecha rota)
+y un CSV Windows-1252 con `;` y coma decimal reconocido por nombre.
+
 ## Reportes y exportación (PDF / Excel)
 
 **Regla del proyecto:** toda lista o panel del CRM nace con «Exportar» PDF y Excel, y todos los reportes salen del mismo servicio para verse iguales y con la marca del cliente.
@@ -242,6 +323,8 @@ vocabulario ya personalizado ni cambia o borra roles, campos o etiquetas existen
 | Eliminar / restaurar contactos; archivar / restaurar oportunidades (uno o en lote) | L2 |
 | Ver el historial de un contacto o de una oportunidad | L2 |
 | Editar o eliminar una nota ajena | L2 (la propia: su autor) |
+| Ver ventas, sus análisis y reportes | Acceso al módulo |
+| Importar ventas, revertir importaciones y guardar plantillas de mapeo | L2 |
 | Configurar campos, etiquetas, roles, vocabulario, moneda, embudos, etapas, motivos y catálogo; ver y aplicar plantillas | L4 |
 
 ## API (`backend/crm/`)
@@ -252,22 +335,26 @@ vocabulario ya personalizado ni cambia o borra roles, campos o etiquetas existen
 Oportunidades: `list_oportunidades` (`vista` lista o tablero, con resumen), `get_oportunidad`, `save_oportunidad`, `move_oportunidad`, `bulk_oportunidades`,
 `list_notas`, `save_nota`, `export_oportunidades`; configuración: `get_config`, `save_config`, `list_embudos`, `save_embudo`, `save_etapa`, `list_motivos`,
 `save_motivo`, `list_categorias_item`, `save_categoria_item`, `list_items`, `save_item`. `list_historial` acepta `tabla` (`crm_contactos` | `crm_oportunidades`).
-Helpers en `backend/_lib/_crm.php` (los de campos y etiquetas sirven a contactos y oportunidades vía `crmEntidad`), `_crm_oportunidades.php`, `_historial.php` y `_reportes.php`. Todo con `db_prepare_or_fail`, respuesta
+Ventas: `list_ventas` (`vista` lista, clientes, items, categorias o meses; siempre con resumen), `get_venta`, `import_ventas` (`accion` simular, iniciar, bloque o
+finalizar), `list_importaciones`, `revertir_importacion`, `list_import_plantillas`, `save_import_plantilla`, `export_ventas`.
+Helpers en `backend/_lib/_crm.php` (los de campos y etiquetas sirven a contactos y oportunidades vía `crmEntidad`), `_crm_oportunidades.php`, `_crm_ventas.php`, `_historial.php` y `_reportes.php`. Todo con `db_prepare_or_fail`, respuesta
 `{action, mensaje, data}` y guardado en transacción. `save_vinculo`/`remove_vinculo` están probados pero la UI v0 edita
 los vínculos desde el formulario de la Organización.
 
 ## Frontend (`/m/crm/…`)
 
-`contactos` (listado + filtros + lote), `contactos/:id` (perfil), `oportunidades` (tablero/lista), `oportunidades/:id` (ficha), `configuracion` (L4: campos,
+`contactos` (listado + filtros + lote), `contactos/:id` (perfil), `oportunidades` (tablero/lista), `oportunidades/:id` (ficha), `ventas` (análisis, detalle,
+importaciones y asistente de importación), `configuracion` (L4: campos,
 etiquetas, embudo, catálogo, roles, vocabulario y plantillas; cada pestaña se crea al abrirla). Diálogos: formulario de contacto, de oportunidad, de cierre,
 selector de etiquetas (multi, agrupado, por destino), historial (contactos y oportunidades). Componentes reutilizables:
 `app-contacto-picker` (buscador con autocompletado de un tipo de contacto), `app-item-picker` (ítems del catálogo), `app-campos-form` (campos personalizados),
 `app-tag-chip`, `app-date-input`, `app-export-menu` (botón Exportar). `CrmConfigService.money()` formatea montos con la moneda de la empresa.
+Lectura de archivos: `services/import/import-parse.ts` (funciones puras con pruebas; ExcelJS solo al abrir un `.xlsx`).
 `DialogService.confirm` gana `confirmWord`.
 
 ## Cómo probarlo en local
 
-Migraciones 001–005 + `database/dev-seed-crm.sql` (solo desarrollo, **no** se despliega: usuarios con token conocido,
+Migraciones 001–006 + `database/dev-seed-crm.sql` (solo desarrollo, **no** se despliega: usuarios con token conocido,
 61 personas y 20 organizaciones ficticias, con jerarquía y roles, config de los tres pilotos; el embudo y el catálogo se crean aplicando una plantilla
 desde *Ajustes → Plantillas*). Login de prueba en dev:
 `window.__leDev.login('dev-token-l4')` (l5, l4, l2, l1, nocrm, otro). Ver «Desarrollo local» en `pendientes.md`.
@@ -290,7 +377,7 @@ Cada fase se prueba, se despliega y se usa sola. Todo es configurable por empres
 |---|---|
 | **0** ✅ | Servicio de reportes con marca del cliente + exportar contactos (esta sección: *Reportes y exportación*) |
 | **A** ✅ | **Oportunidades**: un embudo por empresa configurable (tablas listas para varios), etapas con probabilidad y tipo abierta/ganada/perdida, motivos de cierre; tablero (arrastrar con `@angular/cdk`) + lista; catálogo de ítems (producto/servicio/tratamiento) y líneas por oportunidad; notas; etiquetas y campos personalizados también para oportunidades; vocabulario `oportunidad` e `item`; visibilidad igual que contactos (L2 archiva y ve historial, L4 configura). Migración `005`. |
-| **B** | **Ventas importadas** por Excel/CSV: `crm_ventas` + líneas + lotes revertibles + plantillas de mapeo de columnas; la organización se identifica por NIT o código de cliente; pestaña «Ventas» en el perfil de la organización. El navegador lee el archivo y envía bloques al servidor. Migración `006`. |
+| **B** ✅ | **Ventas importadas** por Excel/CSV: `crm_ventas` + líneas + lotes revertibles + plantillas de mapeo de columnas; la organización se identifica por NIT o código de cliente; pestaña «Ventas» en el perfil de la organización. El navegador lee el archivo y envía bloques al servidor. Migración `006`. |
 | **C** | **Metas paramétricas** (empresa → sede → organización): métricas configurables (ventas en monto o cantidad, filtro por ítem o categoría, oportunidades ganadas, clientes con compra), períodos, avance y «esperado a la fecha»; panel superior en Oportunidades. La meta de la empresa suma las sedes de la empresa y muestra **solo el agregado** a todo el CRM (excepción documentada al aislamiento por sede). Migración `007`. |
 
 Las ventas y las metas viven dentro del CRM; sus tablas se piensan para que un futuro módulo de Ventas/Facturación escriba en las mismas.
@@ -301,6 +388,8 @@ Las ventas y las metas viven dentro del CRM; sus tablas se piensan para que un f
 |---|---|
 | 2026-09-25 | Reportes PDF/Excel **en el navegador** con carga diferida (`jspdf`, `jspdf-autotable`, `exceljs`), un `ReportSpec` común y la marca del cliente; el logo llega por `reportes/get_marca.php` (sin configurar CORS en R2) |
 | 2026-09-25 | Toda lista o panel del CRM lleva «Exportar»; la exportación de datos personales se audita (`crm_exportar` en `le_H_admin`) y tiene topes (Excel 20.000 filas, PDF 2.000) |
+| 2026-09-25 | Ventas: el navegador lee el archivo y manda bloques ya agrupados; revisión completa en el servidor con transacción revertida antes de guardar; cada carga es un lote revertible (lógico) |
+| 2026-09-25 | Cliente por documento (solo dígitos, con y sin DV), nombre exacto o campo personalizado; duplicados por número de documento con «dejar» o «reemplazar»; importar y revertir = L2 |
 | 2026-09-25 | Estado de una oportunidad = tipo de su etapa; cerrar exige motivo solo si la empresa tiene motivos activos; valor = suma de líneas o valor escrito |
 | 2026-09-25 | Campos y etiquetas con destino «oportunidad» en tablas espejo (`crm_oportunidad_valores`/`_tags`); los helpers se generalizan con `crmEntidad` |
 | 2026-09-25 | Oportunidades → ventas importadas → metas, en ese orden y dentro del CRM; en pantalla «Oportunidad» (no «Negocio»); la meta de la empresa se muestra solo como total agregado |
@@ -327,11 +416,13 @@ Las ventas y las metas viven dentro del CRM; sus tablas se piensan para que un f
 aviso, no bloqueo; búsqueda v0 no tolera errores de tipeo; tope de 5.000 por lote.
 
 **Por construir / definir:**
-1. **Oportunidades (fase A), ventas importadas (B) y metas (C)**: plan aprobado, ver *Hoja de ruta*. Actividades y cotizaciones: por definir.
+1. **Metas (fase C)**: plan aprobado, ver *Hoja de ruta*. Actividades y cotizaciones: por definir.
+1b. Ventas: reactivar automáticamente lo que un lote revertido había reemplazado; leer `.xls` antiguos; cerrar solos los lotes «En proceso» abandonados
+   (hoy se revierten a mano); ventas creadas a mano (hoy solo por archivo; llegarán con Pedidos/Facturación).
 2. **Orden por columna** en el listado (el backend ya lo soporta: `orden`, `dir`).
 3. **Datos personales**: autorización de tratamiento por contacto; en la clínica, la historia clínica queda fuera del CRM.
 4. **Purga del historial** (política de retención a largo plazo, si se necesita).
-5. ~~Exportar contactos (Excel/PDF)~~ ✅ 2026-09-25. Falta **importar** contactos desde Excel/CSV (la lectura de archivos llega con la fase B).
+5. ~~Exportar contactos (Excel/PDF)~~ ✅ 2026-09-25. Falta **importar** contactos desde Excel/CSV (se puede reutilizar `import-parse.ts` y el patrón simular/lotes de ventas).
 6. Etiquetas con `aplica_a` restringido que ya están asignadas al tipo contrario: hoy se conservan.
 7. Plantillas y nombres por defecto solo en español/inglés; los textos de las plantillas (campos, etiquetas) son en español.
 8. Jerarquía: hoy el filtro «Pertenece a» trae solo los dependientes directos (no todo el árbol).
