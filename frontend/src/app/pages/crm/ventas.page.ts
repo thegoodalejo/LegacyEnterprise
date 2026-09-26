@@ -418,7 +418,7 @@ export default class VentasPage {
     if (!ok) return;
     const r = await this.loading.wrap(() => this.crm.revertirImportacion(i.id));
     if (!r.action || !r.data) { await this.dialogs.error({ title: this.i18n.t('crm.sales.revert_error'), message: r.mensaje }); return; }
-    await this.dialogs.success({ title: this.i18n.t('crm.sales.reverted'), message: this.i18n.t('crm.sales.reverted_msg', { n: r.data.ventas_desactivadas }) });
+    await this.dialogs.success({ title: this.i18n.t('crm.sales.reverted'), message: this.i18n.t('crm.sales.reverted_msg', { n: r.data.ventas_desactivadas ?? 0 }) });
     await this.load();
   }
 

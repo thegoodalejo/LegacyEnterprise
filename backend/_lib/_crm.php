@@ -159,8 +159,8 @@ function crmBuildBusqueda(array $textos, array $numeros): string
  * Condición WHERE (alias `c` = crm_contactos) para los filtros del listado.
  * Claves: q, relacionados (bool, por defecto true: `q` también busca en las personas de una organización y en las
  * organizaciones de una persona), tipo, estado (activos|archivados|todos), responsable, creado_por, creado_desde,
- * creado_hasta, padre (id de la organización a la que pertenecen), tags[], tags_modo (cualquiera|todos),
- * campos[{id_campo, op, valor, valor2}].
+ * creado_hasta, padre (id de la organización a la que pertenecen), importacion (id del lote de «Importar contactos» que los creó),
+ * tags[], tags_modo (cualquiera|todos), campos[{id_campo, op, valor, valor2}].
  * Devuelve ['sql' => ..., 'types' => ..., 'params' => [...]].
  */
 function crmFiltros(mysqli $conn, array $ctx, array $f): array
@@ -181,6 +181,8 @@ function crmFiltros(mysqli $conn, array $ctx, array $f): array
     }
     if (!empty($f['responsable'])) { $w[] = 'c.id_responsable = ?'; $t .= 'i'; $p[] = (int)$f['responsable']; }
     if (!empty($f['creado_por']))  { $w[] = 'c.created_by = ?';     $t .= 'i'; $p[] = (int)$f['creado_por']; }
+    // Importación de contactos: los que creó ese lote (Importar contactos → «Ver sus contactos»).
+    if (!empty($f['importacion'])) { $w[] = 'c.id_importacion = ?'; $t .= 'i'; $p[] = (int)$f['importacion']; }
 
     $desde = crmFecha($f['creado_desde'] ?? null, 'Creado desde');
     if ($desde !== null) { $w[] = 'c.created_at >= ?'; $t .= 's'; $p[] = $desde . ' 00:00:00'; }
@@ -676,14 +678,14 @@ function crmParsearContacto(mysqli $conn, array $ctx, string $tipo, array $src, 
     return $d;
 }
 
-/** Inserta el contacto (base + extensión) y devuelve su id. No escribe historial (lo hace quien llama). */
-function crmInsertarContacto(mysqli $conn, array $ctx, string $tipo, array $d): int
+/** Inserta el contacto (base + extensión) y devuelve su id. `$idImportacion`: el lote que lo creó (importar contactos). No escribe historial (lo hace quien llama). */
+function crmInsertarContacto(mysqli $conn, array $ctx, string $tipo, array $d, ?int $idImportacion = null): int
 {
     crmExec($conn,
-        'INSERT INTO crm_contactos (id_sede, tipo, nombre_completo, direccion, ciudad, lat, lng, telefono, id_responsable, busqueda, created_by, updated_by)
-         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)',
-        'issssddsisii', [$ctx['id_sede'], $tipo, $d['nombre_completo'], $d['direccion'], $d['ciudad'], $d['lat'], $d['lng'],
-            $d['telefono'], $d['id_responsable'], $d['busqueda'], $ctx['id_usuario'], $ctx['id_usuario']]);
+        'INSERT INTO crm_contactos (id_sede, tipo, nombre_completo, direccion, ciudad, lat, lng, telefono, id_responsable, id_importacion, busqueda, created_by, updated_by)
+         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)',
+        'issssddsiisii', [$ctx['id_sede'], $tipo, $d['nombre_completo'], $d['direccion'], $d['ciudad'], $d['lat'], $d['lng'],
+            $d['telefono'], $d['id_responsable'], $idImportacion, $d['busqueda'], $ctx['id_usuario'], $ctx['id_usuario']]);
     $id = (int)$conn->insert_id;
 
     if ($tipo === 'persona') {

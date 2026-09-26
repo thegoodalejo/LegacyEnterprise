@@ -1,6 +1,7 @@
 <?php
-// Guarda (crea o sobrescribe por nombre) o desactiva una plantilla de mapeo de importación de ventas (L2+).
-// POST: nombre, mapeo (JSON: {columnas:{campo: índice de columna}, fila_encabezado, formato_fecha, decimal, opciones:{…}}), activo (0 = eliminar).
+// Guarda (crea o sobrescribe por nombre) o desactiva una plantilla de mapeo de importación (L2+). El nombre es único por empresa y tipo.
+// POST: tipo (ventas —por defecto— | contactos), nombre, mapeo (JSON: {columnas:{campo: índice de columna}, fila_encabezado, formato_fecha, decimal,
+// opciones:{…}}), activo (0 = eliminar).
 require_once '../db_connection.php';
 require_once '../cors.php';
 require_once '../auth.php';
@@ -10,10 +11,12 @@ $ctx = crmContext();
 requireRole('L2');
 $nombre = crmClean($_POST['nombre'] ?? null, 80, 'Nombre', true);
 $activo = isset($_POST['activo']) ? (($_POST['activo'] === '1') ? 1 : 0) : 1;
+$tipo = (string)($_POST['tipo'] ?? 'ventas');
+if (!in_array($tipo, ['ventas', 'contactos'], true)) authFail(400, 'Tipo de plantilla inválido');
 
 $conn = conectar();
 if ($activo === 0) {
-    crmExec($conn, "UPDATE crm_import_plantillas SET activo = 0, updated_by = ? WHERE id_empresa = ? AND tipo = 'ventas' AND nombre = ?", 'iis', [$ctx['id_usuario'], $ctx['id_empresa'], $nombre]);
+    crmExec($conn, 'UPDATE crm_import_plantillas SET activo = 0, updated_by = ? WHERE id_empresa = ? AND tipo = ? AND nombre = ?', 'iiss', [$ctx['id_usuario'], $ctx['id_empresa'], $tipo, $nombre]);
     $conn->close();
     crmOk([], 'Plantilla eliminada');
 }
@@ -22,9 +25,9 @@ if (!$mapeo || !is_array($mapeo['columnas'] ?? null)) authFail(400, 'El mapeo de
 $json = json_encode($mapeo, JSON_UNESCAPED_UNICODE);
 if (strlen($json) > 20000) authFail(400, 'El mapeo es demasiado grande');
 crmExec($conn,
-    "INSERT INTO crm_import_plantillas (id_empresa, tipo, nombre, mapeo, created_by, updated_by) VALUES (?, 'ventas', ?, ?, ?, ?)
-     ON DUPLICATE KEY UPDATE mapeo = VALUES(mapeo), activo = 1, updated_by = VALUES(updated_by)",
-    'issii', [$ctx['id_empresa'], $nombre, $json, $ctx['id_usuario'], $ctx['id_usuario']]);
+    'INSERT INTO crm_import_plantillas (id_empresa, tipo, nombre, mapeo, created_by, updated_by) VALUES (?, ?, ?, ?, ?, ?)
+     ON DUPLICATE KEY UPDATE mapeo = VALUES(mapeo), activo = 1, updated_by = VALUES(updated_by)',
+    'isssii', [$ctx['id_empresa'], $tipo, $nombre, $json, $ctx['id_usuario'], $ctx['id_usuario']]);
 $conn->close();
 
 crmOk(['nombre' => $nombre], 'Plantilla guardada');

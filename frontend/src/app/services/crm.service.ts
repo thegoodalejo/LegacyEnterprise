@@ -39,6 +39,8 @@ export interface FiltroCampo { id_campo: number; op: string; valor?: ValorCampo;
 export interface Filtros {
   q?: string; relacionados?: boolean; padre?: number; tipo?: TipoContacto | ''; estado?: EstadoFiltro; responsable?: number; creado_por?: number;
   creado_desde?: string; creado_hasta?: string; tags?: number[]; tags_modo?: 'cualquiera' | 'todos'; campos?: FiltroCampo[];
+  /** Los que creó ese lote de «Importar contactos». */
+  importacion?: number;
 }
 
 export interface ContactoFila {
@@ -102,6 +104,8 @@ export interface EntradaHistorial {
     desde?: { id: number; nombre: string }; hasta?: { id: number; nombre: string }; estado?: string; motivo?: string | null;
     /** Venta registrada desde la oportunidad (venta_registrada, venta_anulada, venta_restaurada, venta_reemplazada). */
     id_venta?: number; documento?: string | null; total?: number; id_importacion?: number | null;
+    /** Importar contactos: archivo del lote que lo creó, actualizó o (al revertirse) archivó. */
+    archivo?: string | null;
   } | null;
 }
 export interface ListaHistorial { historial: EntradaHistorial[]; total: number; pagina: number; por_pagina: number; desde: string; hay_anteriores: boolean }
@@ -213,11 +217,24 @@ export interface VentaManual {
   id_oportunidad?: number;
   lineas: { id_item: number | null; descripcion: string; cantidad: number; precio_unitario: number }[];
 }
+export type TipoLote = 'ventas' | 'contactos';
 export interface Importacion {
-  id: number; archivo: string | null; estado: 'procesando' | 'completa' | 'revertida'; filas_total: number; filas_ok: number; filas_error: number;
+  id: number; tipo: TipoLote; archivo: string | null; estado: 'procesando' | 'completa' | 'revertida'; filas_total: number; filas_ok: number; filas_error: number;
   ventas_nuevas: number; ventas_reemplazadas: number; ventas_omitidas: number; items_creados: number; total_valor: number;
   fecha_desde: string | null; fecha_hasta: string | null; errores: { fila: number; motivo: string }[]; created_at: string; revertido_at: string | null;
   creado_por: string | null; revertido_por: string | null;
+  /** Solo lotes de contactos: qué tipo se importó y cuántos se crearon, actualizaron, quedaron igual; personas de referencia y vínculos nuevos. */
+  tipo_contacto: TipoContacto | null; contactos_nuevos: number; contactos_actualizados: number; contactos_omitidos: number; personas_creadas: number; vinculos_creados: number;
+}
+/** Opciones de «Importar contactos» (ver backend/_lib/_crm_import_contactos.php). */
+export interface OpcionesImportContactos {
+  tipo: TipoContacto; identificar: 'documento' | 'nombre' | 'campo' | 'ninguno'; id_campo?: number | null; existentes: 'omitir' | 'actualizar';
+  indicativo: string; id_responsable?: number | null;
+}
+export interface ResultadoBloqueContactos {
+  filas_ok: number; filas_error: number; contactos_nuevos: number; contactos_actualizados: number; contactos_omitidos: number; personas_creadas: number;
+  vinculos_creados: number; errores: { fila: number; motivo: string }[];
+  organizaciones_no_encontradas: string[]; etiquetas_desconocidas: string[]; roles_desconocidos: string[]; responsables_desconocidos: string[];
 }
 export interface OpcionesImport { identificar: 'documento' | 'nombre' | 'campo'; id_campo?: number | null; items_nuevos: 'crear' | 'sin_item'; duplicados: 'omitir' | 'reemplazar' }
 export interface ResultadoBloque {
@@ -408,19 +425,29 @@ export class CrmService {
     return this.api.post('crm/import_ventas.php', { accion: 'iniciar', archivo, filas_total: filasTotal, opciones, mapeo });
   }
   finalizarImportacion(id: number): Promise<ApiResponse<{ id: number }>> { return this.api.post('crm/import_ventas.php', { accion: 'finalizar', id_importacion: id }); }
-  listImportaciones(pagina = 1, porPagina = 25): Promise<ApiResponse<{ importaciones: Importacion[]; total: number }>> {
-    return this.api.post('crm/list_importaciones.php', { pagina, por_pagina: porPagina });
+  listImportaciones(pagina = 1, porPagina = 25, tipo: TipoLote = 'ventas'): Promise<ApiResponse<{ importaciones: Importacion[]; total: number }>> {
+    return this.api.post('crm/list_importaciones.php', { tipo, pagina, por_pagina: porPagina });
   }
-  revertirImportacion(id: number): Promise<ApiResponse<{ ventas_desactivadas: number }>> { return this.api.post('crm/revertir_importacion.php', { id_importacion: id }); }
+  // ─── Importar contactos ─────────────────────────────────────────────────────────────────────────────────────────
+  /** `padres`: claves de las organizaciones de bloques anteriores que el archivo usa como matriz (solo en la simulación). */
+  importarContactos(accion: 'simular' | 'bloque', filas: unknown[], opciones: OpcionesImportContactos, extra: { idImportacion?: number; padres?: string[]; archivo?: string } = {}): Promise<ApiResponse<ResultadoBloqueContactos>> {
+    return this.api.post('crm/import_contactos.php', { accion, filas, opciones, id_importacion: extra.idImportacion, padres: extra.padres, archivo: extra.archivo });
+  }
+  iniciarImportacionContactos(archivo: string, filasTotal: number, opciones: OpcionesImportContactos, mapeo: unknown): Promise<ApiResponse<{ id: number }>> {
+    return this.api.post('crm/import_contactos.php', { accion: 'iniciar', archivo, filas_total: filasTotal, opciones, mapeo });
+  }
+  finalizarImportacionContactos(id: number): Promise<ApiResponse<{ id: number }>> { return this.api.post('crm/import_contactos.php', { accion: 'finalizar', id_importacion: id }); }
+  /** Ventas: {ventas_desactivadas}; contactos: {contactos_archivados}. */
+  revertirImportacion(id: number): Promise<ApiResponse<{ ventas_desactivadas?: number; contactos_archivados?: number }>> { return this.api.post('crm/revertir_importacion.php', { id_importacion: id }); }
   /** Registra una venta manual; con `validar` solo la revisa en el servidor (no guarda nada). */
   saveVenta(v: VentaManual, validar = false): Promise<ApiResponse<{ id: number; total: number; unidades: number; lineas: number }>> {
     return this.api.post('crm/save_venta.php', { ...v, validar: validar ? 1 : 0 });
   }
   anularVenta(id: number, motivo: string): Promise<ApiResponse<{ id: number; activo: boolean }>> { return this.api.post('crm/anular_venta.php', { id, accion: 'anular', motivo }); }
   restaurarVenta(id: number): Promise<ApiResponse<{ id: number; activo: boolean }>> { return this.api.post('crm/anular_venta.php', { id, accion: 'restaurar' }); }
-  listImportPlantillas(): Promise<ApiResponse<{ plantillas: PlantillaImport[] }>> { return this.api.post('crm/list_import_plantillas.php'); }
-  saveImportPlantilla(nombre: string, mapeo: unknown, activo = true): Promise<ApiResponse<{ nombre: string }>> {
-    return this.api.post('crm/save_import_plantilla.php', { nombre, mapeo: activo ? mapeo : undefined, activo: activo ? 1 : 0 });
+  listImportPlantillas(tipo: TipoLote = 'ventas'): Promise<ApiResponse<{ plantillas: PlantillaImport[] }>> { return this.api.post('crm/list_import_plantillas.php', { tipo }); }
+  saveImportPlantilla(nombre: string, mapeo: unknown, activo = true, tipo: TipoLote = 'ventas'): Promise<ApiResponse<{ nombre: string }>> {
+    return this.api.post('crm/save_import_plantilla.php', { tipo, nombre, mapeo: activo ? mapeo : undefined, activo: activo ? 1 : 0 });
   }
   exportVentas(filtros: FiltrosVenta, pagina: number, porPagina: number, formato: 'pdf' | 'xlsx', totalEsperado?: number): Promise<ApiResponse<PaginaExportVentas>> {
     return this.api.post('crm/export_ventas.php', { filtros, pagina, por_pagina: porPagina, formato, total_esperado: totalEsperado });

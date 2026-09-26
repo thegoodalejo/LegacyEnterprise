@@ -27,6 +27,8 @@ import { LoadingService } from '../../services/loading.service';
 import { SessionService } from '../../services/session.service';
 import { TranslatePipe, TranslationService } from '../../services/translation.service';
 import { ContactoDialogComponent, ContactoDialogResult } from './contacto-dialog.component';
+import { ContactosImportResult, abrirImportarContactos } from './contactos-import-dialog.component';
+import { abrirImportacionesContactos } from './contactos-importaciones-dialog.component';
 import { formatDate } from './crm-format';
 import { TranslatedPaginatorIntl } from './translated-paginator-intl';
 
@@ -59,6 +61,13 @@ const OP_KEY: Record<string, string> = {
         <h1>{{ 'crm.contacts.title' | translate }}</h1>
         <div class="actions">
           <app-export-menu [alcances]="exportAlcances()" [disabled]="!total()" (exportar)="exportar($event)" />
+          @if (canDelete()) {
+            <button mat-stroked-button id="btn-import-contacts" [matMenuTriggerFor]="importMenu"><mat-icon>upload</mat-icon>{{ 'crm.cimp.button' | translate }}</button>
+            <mat-menu #importMenu="matMenu">
+              <button mat-menu-item id="btn-import-file" (click)="importar()"><mat-icon>upload_file</mat-icon>{{ 'crm.cimp.menu_file' | translate }}</button>
+              <button mat-menu-item id="btn-import-history" (click)="verImportaciones()"><mat-icon>history</mat-icon>{{ 'crm.cimp.menu_history' | translate }}</button>
+            </mat-menu>
+          }
           <button mat-stroked-button id="btn-select-mode" (click)="toggleSelecting()" [attr.aria-pressed]="seleccionando()">
             <mat-icon>{{ seleccionando() ? 'close' : 'checklist' }}</mat-icon>{{ (seleccionando() ? 'crm.select.cancel' : 'crm.select.mode') | translate }}
           </button>
@@ -103,6 +112,12 @@ const OP_KEY: Record<string, string> = {
             <button mat-button id="btn-clear-filters" (click)="clearFilters()">{{ 'crm.filters.clear' | translate }}</button>
           }
         </div>
+        @if (importacion(); as imp) {
+          <div class="chips" id="import-filter-chip">
+            <span class="pill"><mat-icon class="mini">upload_file</mat-icon> {{ 'crm.cimp.filter_chip' | translate: { file: imp.archivo } }}</span>
+            <button mat-icon-button type="button" (click)="importacion.set(null)" [attr.aria-label]="'common.clear' | translate"><mat-icon>close</mat-icon></button>
+          </div>
+        }
 
         @if (showFilters()) {
           <div class="filter-more" id="filters-panel">
@@ -348,6 +363,7 @@ const OP_KEY: Record<string, string> = {
     .label { font: var(--mat-sys-label-large); color: var(--md-sys-color-on-surface-variant); }
     .parent-filter { display: flex; flex-direction: column; gap: 4px; flex: 1 1 260px; min-width: 0; }
     .pill { padding: 4px 12px; border-radius: 999px; background: var(--md-sys-color-secondary-container); color: var(--md-sys-color-on-secondary-container); font: var(--mat-sys-label-large); }
+    #import-filter-chip { margin-top: 8px; } .mini { font-size: 16px; width: 16px; height: 16px; vertical-align: -3px; }
     .tags-filter, .cf { display: flex; flex-direction: column; gap: 8px; align-items: flex-start; width: 100%; }
     .chips { display: flex; flex-wrap: wrap; align-items: center; gap: 6px; }
     .cf-row { display: flex; flex-wrap: wrap; align-items: center; gap: 12px; width: 100%; > mat-form-field, > app-date-input { flex: 1 1 180px; min-width: 0; } .op { flex: 0 1 150px; } }
@@ -400,6 +416,8 @@ export default class ContactosPage {
   readonly relacionados = signal(true);
   /** Organización a la que pertenecen los que se buscan. */
   readonly padre = signal<{ id: number; nombre: string } | null>(null);
+  /** Lote de «Importar contactos» cuyos contactos se ven (desde el asistente o las importaciones anteriores). */
+  readonly importacion = signal<{ id: number; archivo: string } | null>(null);
   readonly tagsModo = signal<'cualquiera' | 'todos'>('cualquiera');
   readonly camposFiltro = signal<FiltroCampoUI[]>([]);
   private nextKey = 1;
@@ -413,6 +431,7 @@ export default class ContactosPage {
     if (this.q()) f.q = this.q();
     if (!this.relacionados()) f.relacionados = false;
     if (this.padre()) f.padre = this.padre()!.id;
+    if (this.importacion()) f.importacion = this.importacion()!.id;
     if (this.tipo()) f.tipo = this.tipo();
     if (this.responsable()) f.responsable = this.responsable()!;
     if (this.creadoPor()) f.creado_por = this.creadoPor()!;
@@ -431,7 +450,7 @@ export default class ContactosPage {
   /** Hay algún filtro activo (búsqueda, tipo, estado distinto de Activos o los del panel). */
   readonly anyFilter = computed(() => {
     const f = this.filtros();
-    return this.moreCount() > 0 || !!f.q || !!f.tipo || f.estado !== 'activos' || !!this.qInput();
+    return this.moreCount() > 0 || !!f.q || !!f.tipo || f.estado !== 'activos' || !!this.qInput() || !!f.importacion;
   });
 
   // ─── Datos y paginación ────────────────────────────────────────────────────────────────────────────────────────
@@ -520,7 +539,7 @@ export default class ContactosPage {
   clearFilters(): void {
     this.qInput.set(''); this.q.set('');
     this.tipo.set(''); this.estado.set('activos'); this.responsable.set(null); this.creadoPor.set(null);
-    this.relacionados.set(true); this.padre.set(null);
+    this.relacionados.set(true); this.padre.set(null); this.importacion.set(null);
     this.desde.set(null); this.hasta.set(null); this.tagsSel.set([]); this.tagsModo.set('cualquiera'); this.camposFiltro.set([]);
   }
 
@@ -637,6 +656,7 @@ export default class ContactosPage {
     if (f.tipo) l.push(`${t('crm.filters.type')}: ${t(f.tipo === 'persona' ? 'crm.tipo.personas' : 'crm.tipo.organizaciones')}`);
     l.push(`${t('crm.filters.status')}: ${t(f.estado === 'activos' ? 'crm.filters.active' : f.estado === 'archivados' ? 'crm.filters.archived' : 'crm.filters.all')}`);
     if (this.padre()) l.push(`${t('crm.filters.parent')}: ${this.padre()!.nombre}`);
+    if (this.importacion()) l.push(t('crm.cimp.filter_chip', { file: this.importacion()!.archivo }));
     if (this.tagsSel().length) {
       l.push(`${t('crm.filters.tags')}: ${this.tagsSel().map(x => x.nombre).join(', ')}${this.tagsSel().length > 1 ? ` (${t(this.tagsModo() === 'todos' ? 'crm.filters.tags_all' : 'crm.filters.tags_any')})` : ''}`);
     }
@@ -651,6 +671,20 @@ export default class ContactosPage {
     }
     if (f.relacionados === false) l.push(t('crm.report.related_off'));
     return l;
+  }
+
+  // ─── Importar contactos (L2+) ──────────────────────────────────────────────────────────────────────────────────
+  importar(): void {
+    abrirImportarContactos(this.matDialog, { tipo: this.tipo() || undefined }).afterClosed().subscribe(r => { if (r) this.trasImportar(r); });
+  }
+  verImportaciones(): void {
+    abrirImportacionesContactos(this.matDialog).afterClosed().subscribe(r => { if (r) this.trasImportar(r); });
+  }
+  /** Con un lote: se filtra por él (en todos los estados: los de un lote revertido quedan archivados). Si no, se recarga. */
+  private trasImportar(r: ContactosImportResult): void {
+    if (r === true) { void this.load(); return; }
+    this.estado.set('todos');
+    this.importacion.set(r.lote);   // el cambio de filtro recarga
   }
 
   // ─── Acciones sobre contactos ──────────────────────────────────────────────────────────────────────────────────

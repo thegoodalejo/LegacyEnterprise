@@ -42,7 +42,7 @@ if ($accion === 'iniciar') {
 
 $id = (int)($_POST['id_importacion'] ?? 0);
 $lote = $id > 0 ? crmImportacion($conn, $ctx, $id) : null;
-if (!$lote) authFail(404, 'Importación no encontrada');
+if (!$lote || $lote['tipo'] !== 'ventas') authFail(404, 'Importación no encontrada');
 if ($lote['estado'] !== 'procesando') authFail(409, 'La importación ya se cerró');
 
 if ($accion === 'bloque') {

@@ -178,20 +178,28 @@ const SINONIMOS: Record<CampoVenta, string[]> = {
   total: ['total', 'valor total', 'vr total', 'vlr total', 'subtotal', 'total linea', 'valor', 'importe'],
 };
 
-/** Propone qué columna va a cada campo según el texto del encabezado (coincidencia exacta primero, luego parcial). */
-export function mapeoAutomatico(encabezados: string[]): Columnas {
+/**
+ * Propone qué columna va a cada campo según el texto del encabezado: primero coincidencias exactas (en todos los campos), luego parciales
+ * (el sinónimo al principio o al final del encabezado). Cada columna se usa una sola vez; el orden de `campos` decide los empates.
+ */
+export function mapeoPorSinonimos<K extends string>(encabezados: string[], campos: readonly K[], sinonimos: Record<K, string[]>): Record<K, number | null> {
   const norm = encabezados.map(h => normalizarEncabezado(h ?? ''));
   const usadas = new Set<number>();
-  const out: Columnas = {};
+  const out = {} as Record<K, number | null>;
   for (const pasada of ['exacta', 'parcial'] as const) {
-    for (const campo of CAMPOS_VENTA) {
+    for (const campo of campos) {
       if (out[campo] !== undefined && out[campo] !== null) continue;
-      const idx = norm.findIndex((h, i) => !usadas.has(i) && h !== '' && SINONIMOS[campo].some(s => (pasada === 'exacta' ? h === s : h.startsWith(s + ' ') || h.endsWith(' ' + s))));
+      const idx = norm.findIndex((h, i) => !usadas.has(i) && h !== '' && (sinonimos[campo] ?? []).some(s => (pasada === 'exacta' ? h === s : h.startsWith(s + ' ') || h.endsWith(' ' + s))));
       if (idx >= 0) { out[campo] = idx; usadas.add(idx); }
     }
   }
-  for (const campo of CAMPOS_VENTA) if (out[campo] === undefined) out[campo] = null;
+  for (const campo of campos) if (out[campo] === undefined) out[campo] = null;
   return out;
+}
+
+/** Propone qué columna va a cada campo de una venta según el texto del encabezado. */
+export function mapeoAutomatico(encabezados: string[]): Columnas {
+  return mapeoPorSinonimos(encabezados, CAMPOS_VENTA, SINONIMOS);
 }
 
 /** Primera fila con al menos dos celdas con texto (1 = primera fila). */

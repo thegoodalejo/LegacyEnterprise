@@ -138,16 +138,24 @@ export class HistorialDialogComponent {
     const tagsLote = Array.isArray(det.tags) ? det.tags.map(n => `«${n}»`).join(', ') : '';
     switch (e.accion) {
       case 'creado':
-        return { ...base, icon: 'add_circle', titulo: this.t('crm.hist.created'), detalles: det.origen === 'referencia_de_organizacion' ? [this.t('crm.hist.created_as_ref')] : [] };
+        return {
+          ...base, icon: 'add_circle', titulo: this.t('crm.hist.created'),
+          detalles: [
+            ...(det.origen === 'referencia_de_organizacion' ? [this.t('crm.hist.created_as_ref')] : []),
+            ...(det.archivo ? [this.t('crm.hist.from_import', { file: det.archivo })] : []),
+          ],
+        };
       case 'actualizado': {
         const d: string[] = (det.cambios ?? []).map(c => `${this.etiquetaCampo(c.campo, c.etiqueta)}: ${this.valor(c.campo, c.antes)} → ${this.valor(c.campo, c.despues)}`);
         if (det.tags && !Array.isArray(det.tags)) {
           if (det.tags.agregados.length) d.push(this.t('crm.hist.tags_added', { tags: det.tags.agregados.map(n => `«${n}»`).join(', ') }));
           if (det.tags.quitados.length) d.push(this.t('crm.hist.tags_removed', { tags: det.tags.quitados.map(n => `«${n}»`).join(', ') }));
         }
+        if (det.origen === 'importacion' && det.archivo) d.push(this.t('crm.hist.from_import', { file: det.archivo }));
         return { ...base, icon: 'edit', titulo: this.t('crm.hist.updated'), detalles: d };
       }
-      case 'archivado': return { ...base, icon: 'delete', titulo: this.t('crm.hist.archived'), detalles: [] };
+      case 'archivado':
+        return { ...base, icon: 'delete', titulo: this.t('crm.hist.archived'), detalles: det.origen === 'reversion_importacion' ? [this.t('crm.hist.import_reverted', { file: det.archivo ?? '—' })] : [] };
       case 'restaurado': return { ...base, icon: 'restore_from_trash', titulo: this.t('crm.hist.restored'), detalles: [] };
       case 'tags_agregados': return { ...base, icon: 'label', titulo: this.t('crm.hist.tags_added', { tags: tagsLote }), detalles: [] };
       case 'tags_quitados': return { ...base, icon: 'label_off', titulo: this.t('crm.hist.tags_removed', { tags: tagsLote }), detalles: [] };

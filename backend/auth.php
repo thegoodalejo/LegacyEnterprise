@@ -20,8 +20,13 @@ const MODULES = ['crm', 'agenda', 'servicios', 'pedidos', 'integraciones', 'gere
 // Los códigos de módulo son también privilegios: dan acceso a ese módulo a L0–L3 (L4+ los ve todos).
 const PRIVILEGES = ['usuarios', 'archivos', ...MODULES];
 
+/** Error de validación lanzado en lugar de responder, solo mientras `$GLOBALS['authFailLanza']` está activo (importaciones fila por fila). */
+class AuthFailException extends RuntimeException {}
+
 function authFail(int $code, string $mensaje): void
 {
+    // Una importación valida cada fila con las mismas funciones del formulario: el error se vuelve el motivo de esa fila y el bloque sigue.
+    if (!empty($GLOBALS['authFailLanza'])) throw new AuthFailException($mensaje, $code);
     http_response_code($code);
     echo json_encode(['action' => false, 'mensaje' => $mensaje]);
     exit;
