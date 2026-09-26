@@ -38,6 +38,12 @@ El trabajo ya es de producto (módulos: CRM, Agenda, …). **CRM: todo lo planea
 Todo el detalle —mapa del módulo, reglas, API, convenciones técnicas, puesta en marcha de un cliente, integración con otros módulos (para planear el
 siguiente), decisiones y backlog— en [docs/modulos/crm.md](docs/modulos/crm.md).
 
+**Comunicaciones (WhatsApp, reemplaza a LegacyChats): fases E0–E5 construidas y desplegadas (2026-09-26; migraciones 010–014):** bandeja de asesores,
+chatbot por palabras de activación (varios flujos, ir a otro flujo, acciones de otros módulos, editor visual y simulador), plantillas de Meta con
+revisión de categoría, campañas con reporte, créditos por bolsa de empresa o sede cobrados con el `pricing` real de Meta. **Contactos, etiquetas,
+campos y notas compartidos con el CRM** (se vende solo). Falta la llave `COM_SECRET_KEY` y el cron del worker en la VPS (dueño) y E6 (archivar
+LegacyChats, con su confirmación). Detalle: [docs/modulos/comunicaciones.md](docs/modulos/comunicaciones.md).
+
 ## Gitflow
 
 | Rama | Significado | Push dispara |
@@ -78,7 +84,10 @@ siguiente), decisiones y backlog— en [docs/modulos/crm.md](docs/modulos/crm.md
 ## Backend — convenciones
 
 - Plantilla de la skill: `requireAuth()` / `requireSede()` / `requireRole()` / `requirePrivilege()` en `auth.php`, más
-  **`requireModulo('crm')`** (contratado en la sede ∩ acceso del usuario) y `sessionPayload()` (sesión + marca + módulos).
+  **`requireModulo('crm')`** (contratado en la sede ∩ acceso del usuario), `requireModuloAlguno([...])` (basta uno) y `sessionPayload()` (sesión + marca + módulos).
+- Contactos, etiquetas, campos, roles, vocabulario, importar contactos y notas: `crmContext(CRM_MODULOS_CONTACTOS)` (CRM **o** Comunicaciones);
+  oportunidades, ventas y metas: `crmContext()` (solo CRM). Comunicaciones: `comContext()` (`_lib/_com.php`). Lo que hace el sistema sin usuario
+  (webhook, worker, chatbot) va al historial con `auditRegistroSistema()`.
 - La sede SIEMPRE sale de la sesión; solo los endpoints de plataforma (L5: `empresas/`, `modulos/`, `sedes/save_sede.php`,
   `sedes/list_sedes_admin.php`) reciben `id_sede`/`id_empresa` por POST.
 - Módulos: catálogo `le_modulos` + contrato `le_sede_modulos` (vigencia por fechas). L4 ve todos los contratados; L0–L3 por
@@ -115,6 +124,12 @@ siguiente), decisiones y backlog— en [docs/modulos/crm.md](docs/modulos/crm.md
 - Cambiar variables del `.env` en la VPS requiere `docker compose up -d` (recrear), no `apache2 reload`.
 - **Zona horaria:** PHP 8 no lee la variable `TZ` del contenedor (usaría UTC: de 7 p. m. a medianoche en Colombia «hoy» sería mañana).
   `db_connection.php` la fija con `date_default_timezone_set(getenv('TZ') ?: 'America/Bogota')`; todo endpoint debe cargarlo **primero**.
+- **Comunicaciones:** los secretos de Meta se cifran con `COM_SECRET_KEY` (base64 de 32 bytes, propia de cada entorno, en el `.env` de la VPS y en
+  el `environment:` del compose; no cambiarla). En local: `COM_GRAPH_FAKE=1` simula a Meta (nunca en producción); el worker
+  (`cron/jobs/com_worker.php`, solo CLI) se corre a mano en Windows. El webhook es público pero exige la firma `X-Hub-Signature-256`.
+- `dialogSize()` solo acepta `'480px' | '560px' | '720px' | '960px'`.
+- Insertar texto en un `textarea` con `[ngModel]` (variables, respuestas rápidas): escribir también `el.value` y el cursor en el mismo momento;
+  ngModel lo pinta en el siguiente render y lo que se teclee antes lo pisa.
 - **Importar fila por fila:** con `$GLOBALS['authFailLanza'] = true`, `authFail()` lanza `AuthFailException` en vez de responder; con un `SAVEPOINT`
   por fila, una importación valida con las mismas funciones del formulario y sigue con la siguiente fila (`_lib/_crm_import_contactos.php`).
   Apagarlo siempre al terminar la fila (lo hace `crmImpcProcesar`).

@@ -1,6 +1,6 @@
 # LegacyEnterprise — estado del arranque y pendientes del dueño
 
-Actualizado: 2026-09-24. Identidad, dominios, contenedores y buckets: [infraestructura.md](infraestructura.md).
+Actualizado: 2026-09-26. Identidad, dominios, contenedores y buckets: [infraestructura.md](infraestructura.md).
 
 ## Estado: fundación en producción ✅
 
@@ -28,6 +28,34 @@ Código en GitHub (`dev`, `qa`, `pdn`; repo **público**: no subir secretos ni d
 3. **Borrar llaves ya cargadas:** `Descargas\legacyenterprise-731cb-firebase-adminsdk-*.json`,
    `Descargas\legacyenterprise-731cb-df5113a01503.json` y `C:\Users\Alejo\r2-prod.env`
    (y, fuera de este proyecto, las llaves de LegacyInSite y LegacyChats que siguen en Descargas).
+
+## Comunicaciones (WhatsApp): lo que queda del dueño
+
+El módulo está desplegado en QA y PDN (migraciones 010–014). Sin estos pasos todo funciona **menos** guardar apps de Meta y líneas (la
+pantalla de plataforma muestra el aviso «Falta COM_SECRET_KEY») y, por tanto, recibir y enviar WhatsApp. Detalle: [modulos/comunicaciones.md](modulos/comunicaciones.md) → *Operación*.
+
+1. **Llave `COM_SECRET_KEY`** (una por entorno; se genera en la VPS, nunca pasa por el chat). El `docker-compose.yml` del repo ya la trae; en la
+   VPS hay que agregar la línea `COM_SECRET_KEY: ${COM_SECRET_KEY}` al `environment:` del servicio `php` (o copiar el compose con `scp`):
+   ```bash
+   for E in production qa; do ssh legacy-vps "cd /opt/legacyenterprise/$E && sed -i '/^COM_SECRET_KEY=\$/d' .env \
+     && { grep -q '^COM_SECRET_KEY=' .env || echo \"COM_SECRET_KEY=\$(openssl rand -base64 32)\" >> .env; }"; done
+   scp infra/production/docker-compose.yml legacy-vps:/opt/legacyenterprise/production/docker-compose.yml
+   scp infra/qa/docker-compose.yml legacy-vps:/opt/legacyenterprise/qa/docker-compose.yml
+   ssh legacy-vps 'cd /opt/legacyenterprise/production && docker compose up -d && cd ../qa && docker compose up -d'
+   ssh legacy-vps "docker exec legacyenterprise_php_prod php -r 'echo strlen(base64_decode(getenv(\"COM_SECRET_KEY\"))), PHP_EOL;'"   # 32
+   ```
+   **No cambiarla después** (lo cifrado con ella dejaría de leerse). O pídemelo y lo corro yo.
+2. **Cron del worker** (crontab de `dev01`, `crontab -e`):
+   ```
+   * * * * * timeout 55 docker exec legacyenterprise_php_prod php /var/www/html/cron/jobs/com_worker.php >> /opt/legacyenterprise/production/logs/com_worker.log 2>&1
+   * * * * * timeout 55 docker exec legacyenterprise_php_qa php /var/www/html/cron/jobs/com_worker.php >> /opt/legacyenterprise/qa/logs/com_worker.log 2>&1
+   ```
+   Sin cron funciona con el disparo del webhook, pero las campañas programadas, los reintentos y la espera por saldo o cupo esperan al siguiente evento.
+3. **Primer cliente** (L5 en la app): contratar `comunicaciones` en la sede, recargar créditos, registrar la app de Meta (copiar su URL de webhook
+   en Meta con el *verify token*), crear un usuario del sistema con token permanente y registrar la línea (se prueba y suscribe la WABA sola).
+   Pasos exactos: `comunicaciones.md` → *Puesta en marcha de un cliente*. Para probar en QA: un número de prueba de Meta (se pierde en el siguiente push a `qa`).
+4. **LegacyChats (E6):** confirmar para apagar su infraestructura y archivar el repositorio `F:\Proyectos\LegacyChats` (no tiene clientes ni datos
+   que migrar). No se ha tocado nada de LegacyChats.
 
 ## Registro de lo hecho (referencia para producción y futuras apps)
 
@@ -160,9 +188,11 @@ Receta sin Docker en Windows (usada para probar el CRM v0; todo en una carpeta t
 1. MariaDB portable: `https://archive.mariadb.org/mariadb-10.11.14/winx64-packages/mariadb-10.11.14-winx64.zip` →
    `bin\mariadb-install-db.exe --datadir=<dir>\data --password=…` → `bin\mariadbd.exe --defaults-file=<dir>\data\my.ini --port=3307`.
 2. Crear la BD `legacyenterprise` (`utf8mb4_unicode_ci`) y un usuario; aplicar `database/migrations/*.sql` en orden y, para
-   tener datos y usuarios de prueba, `database/dev-seed-crm.sql` (**solo local**).
+   tener datos y usuarios de prueba, `database/dev-seed-crm.sql` (**solo local**) y, para Comunicaciones, `database/dev-seed-comunicaciones.sql`
+   (sede solo-Comunicaciones y tokens `dev-token-com-*`).
 3. Backend: `php -d extension_dir=F:/PHP/ext -d extension=mysqli -S 127.0.0.1:8080 -t backend` con `DB_HOST=127.0.0.1`,
-   `DB_PORT=3307`, `DB_USER`, `DB_PASSWORD`, `DB_NAME`, `APP_ENV=qa`.
+   `DB_PORT=3307`, `DB_USER`, `DB_PASSWORD`, `DB_NAME`, `APP_ENV=qa` (Comunicaciones: además `COM_SECRET_KEY` —cualquier base64 de 32 bytes— y
+   `COM_GRAPH_FAKE=1` para simular a Meta).
 4. Frontend: `npm run start:local`. CORS solo admite `http://localhost:4200`: si ya hay un `npm start` ahí (apunta a QA),
    pararlo, o probar con Chromium sin seguridad web (`--disable-web-security`).
 5. Login de prueba (solo en dev): `window.__leDev.login('dev-token-l4')` desde la consola del navegador y `__leDev.go('/m/crm')`.

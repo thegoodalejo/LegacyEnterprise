@@ -10,11 +10,15 @@
 > - **Metas paramétricas** (empresa → sede → organización) con avance, ritmo esperado, generación en lote e informe.
 >
 > Lo que queda es backlog (ver *Pendientes*). Para planear lo que sigue: *Integración con otros módulos* y *Puesta en marcha de un cliente*.
+>
+> **Compartido con Comunicaciones (2026-09-26):** contactos, etiquetas, campos, roles, vocabulario, importar contactos y **notas del contacto** son
+> los mismos en los dos módulos (una sede solo con Comunicaciones los tiene sin CRM). Detalle en *Contactos compartidos con Comunicaciones* y en
+> [comunicaciones.md](comunicaciones.md).
 
 **Contenido:** Objetivo · Principios · Glosario · Pilotos · Mapa del módulo · Modelo de datos · Campos personalizados · Etiquetas · Historial ·
 Filtros y búsqueda · Selección y lote · Importar contactos · Ubicación en el mapa · Oportunidades · Ventas (importación, venta manual, venta desde una
 oportunidad) · Metas · Reportes · Vocabulario · Plantillas · Permisos · API · Frontend · Convenciones técnicas · Cómo probarlo · Puesta en marcha de
-un cliente · Integración con otros módulos · Hoja de ruta · Decisiones · Pendientes.
+un cliente · Integración con otros módulos · Contactos compartidos con Comunicaciones · Hoja de ruta · Decisiones · Pendientes.
 
 ## Objetivo
 
@@ -84,7 +88,7 @@ una tabla base con un solo espacio de ids y una extensión 1–1 por tipo.
 | Tabla | Contenido |
 |---|---|
 | `crm_contactos` | Base: id, `id_sede`, tipo, `nombre_completo`, dirección, ciudad, **lat/lng (ubicación en el mapa, opcional)**, teléfono, responsable, `id_importacion` (el lote de «Importar contactos» que lo creó; migración `009`), `activo`, `busqueda` |
-| `crm_contactos_personas` | Extensión: nombres, apellidos, documento, correo, WhatsApp (indicativo + número), fecha de nacimiento |
+| `crm_contactos_personas` | Extensión: nombres, apellidos, documento, correo, WhatsApp (indicativo + número; `whatsapp_e164` generada e indexada para encontrar el contacto de un mensaje, migración `010`), fecha de nacimiento |
 | `crm_contactos_organizaciones` | Extensión: razón social, documento (NIT…), correo de facturación, `id_padre` (organización a la que pertenece) |
 | `crm_roles_vinculo` | Roles de vínculo (por **empresa**): nombre, orden, activo |
 | `crm_contacto_vinculos` | Organización ↔ Persona (muchos a muchos) con `id_rol` y `principal` |
@@ -93,7 +97,8 @@ una tabla base con un solo espacio de ids y una extensión 1–1 por tipo.
 | `crm_campos_valores` | Valores con **una columna por tipo**: `valor_entero`, `valor_decimal`, `valor_texto`, `valor_booleano`, `valor_fecha` |
 | `crm_tags_grupos`, `crm_tags` | Catálogo de etiquetas (por **empresa**); grupo opcional; `aplica_a` opcional; color hex libre |
 | `crm_contacto_tags` | Relación contacto ↔ etiqueta: PK `(contacto, tag)` + índice inverso `(tag, contacto)` |
-| `le_H_registros` | **Historial genérico de plataforma** (módulo, tabla, id_registro, usuario, acción, detalle JSON) |
+| `le_H_registros` | **Historial genérico de plataforma** (módulo, tabla, id_registro, usuario —NULL si lo hizo el sistema: WhatsApp o el chatbot, desde la `010`—, acción, detalle JSON) |
+| `crm_contacto_notas` | Notas del contacto (autor, texto, `origen` crm/comunicaciones, conversación opcional; borrado lógico), compartidas por CRM y Comunicaciones (migración `011`) |
 | `crm_config` | Por **empresa**: moneda (ISO, por defecto COP) y decimales de los montos (migración `005`) |
 | `crm_embudos`, `crm_etapas` | Por **empresa**: embudos y sus etapas (orden, probabilidad 0–100, tipo abierta/ganada/perdida, color) |
 | `crm_motivos_cierre` | Por **empresa**: por qué se gana o se pierde (tipo ganada/perdida) |
@@ -105,7 +110,8 @@ una tabla base con un solo espacio de ids y una extensión 1–1 por tipo.
 | `crm_metricas`, `crm_metas` | Qué se mide y cuánto se espera de la empresa, la sede o una organización en un período (migración `007`, ver *Metas*) |
 
 **Migraciones del CRM:** `004` base de contactos · `005` oportunidades, embudo, catálogo y configuración · `006` ventas importadas · `007` metas ·
-`008` venta ↔ oportunidad · `009` importar contactos (la `003` es el historial genérico de plataforma). Todas idempotentes; las aplica
+`008` venta ↔ oportunidad · `009` importar contactos (la `003` es el historial genérico de plataforma; la `010` agrega `whatsapp_e164` y el
+historial sin usuario y la `011` las notas del contacto, ambas de Comunicaciones). Todas idempotentes; las aplica
 `/opt/vps-tools/migrate.sh` en cada deploy (registra cada archivo en `schema_migrations`).
 
 **Ámbitos.** Los contactos son de una **sede** (`id_sede` siempre sale de la sesión). La configuración (campos,
@@ -750,7 +756,8 @@ Desde las fases A–C también traen embudo con etapas, motivos de cierre, un ca
 
 | Acción | Mínimo |
 |---|---|
-| Ver, crear, editar, etiquetar (uno o en lote) | Acceso al módulo (`requireModulo('crm')`) |
+| Ver, crear, editar, etiquetar (uno o en lote) | Acceso al módulo (`requireModulo('crm')`; contactos, etiquetas y notas también con Comunicaciones) |
+| Notas del contacto: agregar; editar o eliminar la propia | Acceso a contactos (CRM o Comunicaciones); la ajena, L2 |
 | Crear, editar, mover de etapa y etiquetar oportunidades; agregar notas | Acceso al módulo |
 | Eliminar / restaurar contactos; archivar / restaurar oportunidades (uno o en lote) | L2 |
 | Ver el historial de un contacto o de una oportunidad | L2 |
@@ -769,6 +776,7 @@ Desde las fases A–C también traen embudo con etapas, motivos de cierre, un ca
 `list_contactos`, `get_contacto`, `save_contacto`, `bulk_contactos`, `set_contacto_tags`, `save_vinculo`,
 `remove_vinculo`, `list_historial`, `list_campos`, `save_campo`, `list_tags`, `save_tag`, `save_tag_grupo`,
 `list_roles`, `save_rol`, `list_vocabulario`, `save_vocabulario`, `list_plantillas`, `apply_plantilla`, `list_responsables`, `export_contactos` (más `reportes/get_marca.php`, compartido por todos los reportes).
+Notas del contacto: `list_contacto_notas`, `save_contacto_nota` (`activo=0` borra lógico). `_acciones_bot.php` registra la acción del chatbot `crm.crear_oportunidad`.
 Importar contactos: `import_contactos` (`accion` simular —con `padres` opcional—, iniciar, bloque o finalizar); `list_contactos` acepta el filtro `importacion`.
 Lotes y plantillas son compartidos con ventas y reciben `tipo` (`ventas` por defecto | `contactos`): `list_importaciones`, `list_import_plantillas`,
 `save_import_plantilla`; `revertir_importacion` actúa según el tipo del lote (ventas → `{ventas_desactivadas}`; contactos → `{contactos_archivados}`).
@@ -811,14 +819,16 @@ Lo que un módulo nuevo debería copiar (y lo que no hay que reinventar):
 
 - **Backend, cada endpoint:** `db_connection.php` primero (además de la conexión, fija la **zona horaria de PHP** con la `TZ` del contenedor —la misma
   de MariaDB— o `America/Bogota`: PHP 8 no lee `TZ` y sin esto «hoy» sería UTC), luego `cors.php`, `auth.php` y la librería del módulo. `crmContext()`
-  da sede, empresa, usuario y rol **de la sesión** (la sede nunca llega por POST) y exige el módulo contratado; `requireRole('L2' | 'L4')` para lo sensible.
+  da sede, empresa, usuario y rol **de la sesión** (la sede nunca llega por POST) y exige el módulo contratado (`crmContext(CRM_MODULOS_CONTACTOS)`
+  en lo compartido con Comunicaciones); `requireRole('L2' | 'L4')` para lo sensible.
   Respuesta siempre `{action, mensaje, data}` (`crmOk` / `authFail`); errores de BD con `db_*_or_fail` (JSON, nunca HTML).
 - **Escrituras en transacción:** un `authFail` antes del `commit` la deja revertida sola. Las validaciones viven en helpers (`crmParsearContacto`,
   `crmOpLineasParsear`, `crmVentaManualParsear`, `crmMetaParsear`…) y se reutilizan en todos los caminos (formulario, lote, importación).
 - **Simular antes de guardar:** la misma función con una transacción que se revierte (importar ventas y contactos, generar metas, «Revisar venta»).
 - **Importaciones fila por fila:** `$GLOBALS['authFailLanza'] = true` + `SAVEPOINT` por fila + `catch (AuthFailException)` (ver *Importar contactos*).
 - **Lotes revertibles:** `crm_importaciones` con `tipo`; cada registro guarda su `id_importacion`; revertir es lógico.
-- **Historial:** `auditRegistro($conn, $sede, 'crm', tabla, id, accion, detalle)` en `le_H_registros`; acciones en uso: `creado`, `actualizado`,
+- **Historial:** `auditRegistro($conn, $sede, 'crm', tabla, id, accion, detalle)` en `le_H_registros` (`auditRegistroSistema()` cuando no hay
+  usuario: webhook, worker, chatbot); acciones en uso: `creado`, `actualizado`,
   `archivado`, `restaurado`, `tags_agregados`/`_quitados`, `vinculo_*`, `etapa_cambiada`, `nota_*`, `anulado`, `reemplazado`, `venta_*`. Lo sensible
   de plataforma va con `auditAdmin()` a `le_H_admin` (exportar, importar, revertir, aplicar plantilla).
 - **Eliminación lógica** (`activo = 0`) y restaurable, nunca `DELETE` de registros de negocio.
@@ -830,7 +840,7 @@ Lo que un módulo nuevo debería copiar (y lo que no hay que reinventar):
 
 ## Cómo probarlo en local
 
-Migraciones 001–009 + `database/dev-seed-crm.sql` (solo desarrollo, **no** se despliega: usuarios con token conocido,
+Migraciones 001–014 + `database/dev-seed-crm.sql` (+ `dev-seed-comunicaciones.sql` para la sede solo-Comunicaciones) (solo desarrollo, **no** se despliega: usuarios con token conocido,
 61 personas y 20 organizaciones ficticias, con jerarquía y roles, config de los tres pilotos; el embudo y el catálogo se crean aplicando una plantilla
 desde *Ajustes → Plantillas*). Login de prueba en dev:
 `window.__leDev.login('dev-token-l4')` (l5, l4, l2, l1, nocrm, otro). Ver «Desarrollo local» en `pendientes.md`.
@@ -869,7 +879,8 @@ sesión, no en el repo** (ver *Pendientes*: versionarlas).
 | Reuniones, citas, recordatorios | Agenda | Las muestra en la ficha del contacto |
 | Cotización → pedido | Pedidos | Llega hasta la cotización aceptada |
 | Visitas técnicas, tickets de postventa | Servicios | Muestra el historial en la ficha |
-| WhatsApp, correo, formularios web, webhooks | Integraciones | Recibe leads y registra conversaciones |
+| WhatsApp (bandeja, chatbot, plantillas, campañas); a futuro correo y SMS | **Comunicaciones** (en producción) | Comparte contactos, etiquetas y notas; muestra las conversaciones en el perfil; el chatbot crea oportunidades (`crm.crear_oportunidad`) |
+| Formularios web, webhooks, sistemas externos | Integraciones | Recibe leads |
 | Tableros entre sedes | Gerencia | Expone sus indicadores |
 | Facturación electrónica | (Facturación, por definir) | Recibe las ventas en `crm_ventas` para indicadores y metas |
 
@@ -888,6 +899,32 @@ sesión, no en el repo** (ver *Pendientes*: versionarlas).
   atendidas» de Agenda) es agregar una fuente ahí.
 - **Importador** en el navegador (`import-parse.ts`) y el patrón simular → lote → bloques con `SAVEPOINT` por fila, para importar citas, productos, etc.
 - **Vocabulario y plantillas por nicho:** se extienden con las claves y los datos de ejemplo del módulo nuevo.
+- **Contactos sin CRM:** un módulo que necesite la libreta pero se venda solo (como Comunicaciones) se agrega a `CRM_MODULOS_CONTACTOS` (ver
+  *Contactos compartidos con Comunicaciones*) y monta las mismas pantallas con `data.base`.
+- **Acciones del chatbot:** Agenda, Servicios y Pedidos pueden ofrecer pasos al chatbot de Comunicaciones (agendar una cita, estado de un pedido)
+  con un `backend/<modulo>/_acciones_bot.php` (contrato en [comunicaciones.md](comunicaciones.md) → *Acciones*), como `backend/crm/_acciones_bot.php`.
+
+## Contactos compartidos con Comunicaciones
+
+Desde la migración `010` (2026-09-26) la libreta del CRM es también la del módulo **Comunicaciones** (WhatsApp):
+
+- **Qué se comparte:** contactos (listado, perfil, crear/editar, lote, exportar, historial), **etiquetas**, campos personalizados, roles, vocabulario,
+  responsables, plantillas por nicho, **importar contactos** (sus lotes y plantillas) y las **notas del contacto** (`crm_contacto_notas`, nuevas). Lo
+  demás —oportunidades, ventas, metas, embudo, catálogo, métricas, importar ventas— sigue exigiendo el CRM.
+- **Backend:** esos endpoints llaman `crmContext(CRM_MODULOS_CONTACTOS)` (`['crm', 'comunicaciones']`), que usa `requireModuloAlguno()` de `auth.php`:
+  basta **uno** de los módulos contratado en la sede y permitido al usuario. `list_importaciones`, `list/save_import_plantilla` lo aplican solo con
+  `tipo=contactos`; `revertir_importacion` exige `crm` si el lote es de ventas. Sin argumento, `crmContext()` sigue siendo solo CRM.
+- **Frontend:** las rutas `m/comunicaciones/contactos(/:id)` montan `contactos.page.ts` y `contacto-perfil.page.ts` con `data.base` (input `base`) para
+  que los enlaces se queden en el módulo. El perfil muestra oportunidades, ventas y metas solo con `hasModule('crm')`, y «Conversaciones de
+  WhatsApp» y «Enviar WhatsApp» con `hasModule('comunicaciones')`; la tarjeta **Notas** con cualquiera de los dos. La barra de selección de Contactos
+  ofrece «Campaña de WhatsApp» (L2+ con Comunicaciones).
+- **Ajustes:** las pestañas de etiquetas y campos viven en `crm-tags-tab.component.ts` y `crm-campos-tab.component.ts` y las usan los Ajustes de
+  los dos módulos (sin CRM no se ofrece «Oportunidades» como destino).
+- **Contactos que crea WhatsApp:** un número desconocido que escribe crea una **Persona** con el nombre de su perfil (sin exigir obligatorios); el
+  historial lo muestra como «Sistema · WhatsApp» (`auditRegistroSistema()`, usuario NULL). El chatbot puede etiquetar, guardar datos en el contacto y
+  crear oportunidades («Sistema · chatbot»).
+- **Pruebas:** la regresión del CRM (399) pasa igual; la batería de Comunicaciones comprueba que una sede solo-Comunicaciones trabaja la libreta y
+  recibe 403 en oportunidades, ventas, metas y configuración del embudo.
 
 **Preguntas para planear el siguiente módulo:**
 
