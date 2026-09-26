@@ -75,6 +75,20 @@ function comGraphFake(string $metodo, string $ruta, ?array $json, ?array $multip
     if ($metodo === 'DELETE' && str_contains($ruta, '/message_templates')) return $ok(['success' => true]);
     if ($metodo === 'GET' && str_contains($ruta, '/message_templates')) return $ok(['data' => []]);
     if ($metodo === 'POST' && str_ends_with($ruta, '/media')) return $ok(['id' => 'fake-media-' . bin2hex(random_bytes(6))]);
+    // Webhook alterno por número: se recuerda en un archivo para que la lectura devuelva lo último que se configuró.
+    $wh = sys_get_temp_dir() . '/com_graph_fake_webhooks.json';
+    if ($metodo === 'POST' && preg_match('#^/(\d+)$#', $ruta, $mm) && isset($json['webhook_configuration'])) {
+        $m = json_decode((string)@file_get_contents($wh), true) ?: [];
+        $m[$mm[1]] = (string)($json['webhook_configuration']['override_callback_uri'] ?? '');
+        file_put_contents($wh, json_encode($m));
+        return $ok(['success' => true]);
+    }
+    if ($metodo === 'GET' && preg_match('#^/(\d+)\?fields=webhook_configuration$#', $ruta, $mm)) {
+        $m = json_decode((string)@file_get_contents($wh), true) ?: [];
+        $cfg = ['application' => 'https://legacychats.example/whatsapp/webhook.php'];
+        if (($m[$mm[1]] ?? '') !== '') $cfg['phone_number'] = $m[$mm[1]];
+        return $ok(['webhook_configuration' => $cfg, 'id' => $mm[1]]);
+    }
     if ($metodo === 'POST' && preg_match('#^/\d+$#', $ruta)) return $ok(['success' => true]);   // editar plantilla
     if ($metodo === 'GET' && preg_match('#^/(\d+)#', $ruta, $mm)) {
         return $ok(['id' => $mm[1], 'verified_name' => 'Línea de prueba', 'display_phone_number' => '+57 300 000 0000',

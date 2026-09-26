@@ -1969,5 +1969,20 @@
   "com.camp.read_at": "Read",
   "com.camp.detail": "Detail",
   "com.camp.report_title": "Campaign «{name}»",
-  "com.camp.all_recipients": "All recipients"
+  "com.camp.all_recipients": "All recipients",
+  "com.admin.step_webhook": "Number webhook",
+  "com.admin.wh_here": "Messages: arrive here",
+  "com.admin.wh_elsewhere": "Messages: go to another URL",
+  "com.admin.wh_unknown": "Webhook not checked",
+  "com.admin.wh_goes_to": "Meta sends this number's messages to: {url}",
+  "com.admin.wh_activate": "Receive this number's messages here",
+  "com.admin.wh_restore": "Return to the app URL",
+  "com.admin.wh_check": "Check where they arrive",
+  "com.admin.wh_activate_title": "Receive this number's messages here?",
+  "com.admin.wh_activate_msg": "Meta will send this number's messages and delivery statuses to LegacyEnterprise instead of {url}. Other lines of the same app don't change. Template notices (approval, category) still go to the app URL: use «Sync» in Templates. It can be undone.",
+  "com.admin.wh_restore_title": "Return this number to the app URL?",
+  "com.admin.wh_restore_msg": "This number's messages will go back to the Meta app URL (LegacyChats while both run) and LegacyEnterprise will stop receiving them (replies and ticks won't show here).",
+  "com.admin.wh_error": "Couldn't change the webhook",
+  "com.admin.wh_done_here": "Done: this number's messages arrive here",
+  "com.admin.wh_done_restored": "Done: the number went back to the app URL"
 }

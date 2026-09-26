@@ -11,10 +11,13 @@ export interface LineaAdmin {
   id: number; id_sede: number; sede_nombre: string; empresa_nombre: string; id_app: number; app_nombre: string; nombre: string; telefono_visible: string | null;
   phone_number_id: string; waba_id: string; token_ultimos4: string | null; token_configurado: boolean; nombre_verificado: string | null;
   calidad: string | null; nivel_mensajes: string | null; verificada_at: string | null; suscrita_at: string | null; ultimo_error: string | null;
+  /** A dónde manda Meta los mensajes del número (último dato leído); webhook_aqui null = aún no se ha revisado. */
+  webhook_numero: string | null; webhook_efectivo: string | null; webhook_revisado_at: string | null; webhook_aqui: boolean | null;
   activo: boolean; updated_at: string;
 }
 export interface Linea { id: number; id_sede: number; nombre: string; telefono_visible: string | null; nombre_verificado: string | null; calidad: string | null; nivel_mensajes: string | null; activo: boolean }
-export interface PasoPrueba { paso: 'numero' | 'suscripcion'; ok: boolean; detalle: string }
+export interface PasoPrueba { paso: 'numero' | 'suscripcion' | 'webhook'; ok: boolean; detalle: string; aqui?: boolean }
+export interface WebhookLinea { numero: string | null; waba: string | null; aplicacion: string | null; efectiva: string | null; nuestra: string; aqui: boolean; aviso: string | null }
 export interface BolsaEmpresa {
   id: number; nombre: string; saldo: number;
   sedes: { id: number; nombre: string; fuente: 'sede' | 'empresa'; contratado: boolean; saldo: number }[];
@@ -189,6 +192,7 @@ export class ComunicacionesService {
   listLineas(idSede?: number) { return this.p<{ lineas: LineaAdmin[]; cifrado_disponible: boolean }>('list_lineas', { id_sede: idSede }); }
   saveLinea(d: Record<string, unknown>) { return this.p<{ id: number }>('save_linea', d); }
   probarLinea(id: number) { return this.p<{ ok: boolean; pasos: PasoPrueba[] }>('probar_linea', { id }); }
+  webhookLinea(id: number, accion: 'ver' | 'activar' | 'quitar') { return this.p<WebhookLinea>('webhook_linea', { id, accion }); }
   listBilleteras() { return this.p<{ empresas: BolsaEmpresa[]; ultimas: RecargaReciente[]; recarga_minima: number }>('list_billeteras'); }
   recargar(d: Record<string, unknown>) { return this.p<{ saldo: number }>('recargar', d); }
   listTarifas() { return this.p<{ tarifas: Tarifa[] }>('list_tarifas'); }

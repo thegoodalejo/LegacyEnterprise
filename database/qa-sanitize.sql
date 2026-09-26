@@ -59,6 +59,10 @@ BEGIN
   IF (SELECT COUNT(*) FROM information_schema.tables WHERE table_schema = DATABASE() AND table_name = 'com_lineas') > 0 THEN
     UPDATE com_lineas SET activo = 0, access_token_enc = NULL, token_ultimos4 = NULL, suscrita_at = NULL, verificada_at = NULL;
     UPDATE com_meta_apps SET activo = 0, app_secret_enc = NULL, verify_token_enc = NULL;
+    -- Lo que Meta reportó en PDN (a dónde llegan los mensajes de cada número) no aplica a QA (migración 015).
+    IF (SELECT COUNT(*) FROM information_schema.columns WHERE table_schema = DATABASE() AND table_name = 'com_lineas' AND column_name = 'webhook_numero') > 0 THEN
+      UPDATE com_lineas SET webhook_numero = NULL, webhook_efectivo = NULL, webhook_revisado_at = NULL;
+    END IF;
     DELETE FROM com_entrantes;
     UPDATE com_conversaciones SET wa_id = CONCAT('5550', LPAD(id, 8, '0')), nombre_perfil = IF(nombre_perfil IS NULL, NULL, CONCAT('Cliente ', id)),
                                   resumen = IF(resumen IS NULL, NULL, CONCAT('Mensaje ', id)), variables = NULL;

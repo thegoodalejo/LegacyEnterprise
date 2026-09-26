@@ -135,6 +135,29 @@ function comUrlWebhook(int $idApp): string
     return comUrlApi() . '/comunicaciones/webhook.php?app=' . $idApp;
 }
 
+/**
+ * Lee en Meta a dónde van hoy los eventos de un número (webhook alterno del número → de la WABA → de la app) y lo guarda en la línea.
+ * $l: línea de comLinea() (con token). Devuelve numero, waba, aplicacion, efectiva, nuestra, aqui y aviso (si Meta no dejó leerlo).
+ */
+function comLeerWebhookLinea(mysqli $conn, array $l): array
+{
+    $nuestra = comUrlWebhook((int)$l['id_app']);
+    $v = comGraph('GET', '/' . $l['phone_number_id'] . '?fields=webhook_configuration', $l['token'], $l['graph_version']);
+    if (!$v['ok']) {
+        return ['numero' => null, 'waba' => null, 'aplicacion' => null, 'efectiva' => null, 'nuestra' => $nuestra, 'aqui' => false,
+                'aviso' => 'Meta no dejó leer la configuración del webhook: ' . comErrorDe($v)[1]];
+    }
+    $cfg = $v['data']['webhook_configuration'] ?? [];
+    $numero = ($cfg['phone_number'] ?? '') ?: null;
+    $waba = ($cfg['whatsapp_business_account'] ?? '') ?: null;
+    $aplicacion = ($cfg['application'] ?? '') ?: null;
+    $efectiva = $numero ?? $waba ?? $aplicacion;
+    crmExec($conn, 'UPDATE com_lineas SET webhook_numero = ?, webhook_efectivo = ?, webhook_revisado_at = CURRENT_TIMESTAMP WHERE id = ?',
+        'ssi', [$numero, $efectiva, (int)$l['id']]);
+    return ['numero' => $numero, 'waba' => $waba, 'aplicacion' => $aplicacion, 'efectiva' => $efectiva, 'nuestra' => $nuestra,
+            'aqui' => $efectiva !== null && $efectiva === $nuestra, 'aviso' => null];
+}
+
 // ─── Bajas de marketing (opt-out): el cliente pidió no recibir promociones. Las campañas y plantillas de marketing no le llegan. ───────────
 
 const COM_PALABRAS_BAJA = ['baja', 'stop', 'detener', 'darme de baja', 'no mas mensajes', 'no quiero mas mensajes', 'unsubscribe'];

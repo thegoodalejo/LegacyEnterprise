@@ -1969,5 +1969,20 @@
   "com.camp.read_at": "Leído",
   "com.camp.detail": "Detalle",
   "com.camp.report_title": "Campaña «{name}»",
-  "com.camp.all_recipients": "Todos los destinatarios"
+  "com.camp.all_recipients": "Todos los destinatarios",
+  "com.admin.step_webhook": "Webhook del número",
+  "com.admin.wh_here": "Mensajes: llegan aquí",
+  "com.admin.wh_elsewhere": "Mensajes: van a otra URL",
+  "com.admin.wh_unknown": "Webhook sin revisar",
+  "com.admin.wh_goes_to": "Meta manda los mensajes de este número a: {url}",
+  "com.admin.wh_activate": "Recibir aquí los mensajes de este número",
+  "com.admin.wh_restore": "Devolver a la URL de la app",
+  "com.admin.wh_check": "Revisar a dónde llegan",
+  "com.admin.wh_activate_title": "¿Recibir aquí los mensajes de este número?",
+  "com.admin.wh_activate_msg": "Meta mandará los mensajes y los estados de entrega de este número a LegacyEnterprise en vez de a {url}. Las demás líneas de la misma app no cambian. Los avisos de plantillas (aprobación, categoría) siguen llegando a la URL de la app: usa «Sincronizar» en Plantillas. Se puede deshacer.",
+  "com.admin.wh_restore_title": "¿Devolver este número a la URL de la app?",
+  "com.admin.wh_restore_msg": "Los mensajes de este número volverán a la URL de la app de Meta (la de LegacyChats mientras convivan) y LegacyEnterprise dejará de recibirlos (las respuestas y las palomitas no se verán aquí).",
+  "com.admin.wh_error": "No se pudo cambiar el webhook",
+  "com.admin.wh_done_here": "Listo: los mensajes de este número llegan aquí",
+  "com.admin.wh_done_restored": "Listo: el número volvió a la URL de la app"
 }

@@ -38,6 +38,11 @@ if ($sub['ok']) {
     crmExec($conn, 'UPDATE com_lineas SET ultimo_error = ? WHERE id = ?', 'si', [$err, $id]);
     $pasos[] = ['paso' => 'suscripcion', 'ok' => false, 'detalle' => $err];
 }
+// Informativo (no hace fallar la prueba): a dónde manda Meta hoy los mensajes de este número. Si es la URL de otro sistema que comparte la
+// app (LegacyChats), se usa «Recibir aquí los mensajes de este número» (webhook_linea.php).
+$w = comLeerWebhookLinea($conn, $l);
+$pasos[] = ['paso' => 'webhook', 'ok' => true, 'aqui' => $w['aqui'],
+            'detalle' => $w['aviso'] ?? ($w['aqui'] ? 'Los mensajes llegan aquí' : 'Los mensajes llegan a ' . ($w['efectiva'] ?? '(sin URL)'))];
 auditAdmin($conn, 'com_probar_linea', ['id_linea' => $id, 'pasos' => $pasos], $l['id_sede']);
 $conn->close();
 $ok = !in_array(false, array_column($pasos, 'ok'), true);

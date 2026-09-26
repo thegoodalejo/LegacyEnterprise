@@ -283,6 +283,19 @@ export class RecargaDialogComponent {
                   <span class="chip" [class.ok]="!!l.suscrita_at">{{ (l.suscrita_at ? 'com.admin.subscribed' : 'com.admin.not_subscribed') | translate }}</span>
                   @if (l.calidad) { <span class="chip" [attr.data-q]="l.calidad">{{ 'com.admin.quality' | translate }}: {{ l.calidad }}</span> }
                   @if (l.nivel_mensajes) { <span class="chip">{{ l.nivel_mensajes }}</span> }
+                  <span class="chip" [class.ok]="l.webhook_aqui === true" [class.warn]="l.webhook_aqui === false" [id]="'wh-state-' + l.id">
+                    {{ (l.webhook_aqui === null ? 'com.admin.wh_unknown' : l.webhook_aqui ? 'com.admin.wh_here' : 'com.admin.wh_elsewhere') | translate }}</span>
+                </div>
+                <div class="whrow">
+                  @if (l.webhook_aqui === false && l.webhook_efectivo) { <span class="muted small wh-url">{{ 'com.admin.wh_goes_to' | translate: { url: l.webhook_efectivo } }}</span> }
+                  <span class="spacer"></span>
+                  @if (l.webhook_aqui === true) {
+                    <button mat-button [id]="'btn-wh-restore-' + l.id" (click)="webhook(l, 'quitar')"><mat-icon>undo</mat-icon>{{ 'com.admin.wh_restore' | translate }}</button>
+                  } @else if (l.webhook_aqui === false) {
+                    <button mat-flat-button [id]="'btn-wh-here-' + l.id" [disabled]="!l.token_configurado" (click)="webhook(l, 'activar')"><mat-icon>call_received</mat-icon>{{ 'com.admin.wh_activate' | translate }}</button>
+                  }
+                  <button mat-icon-button [id]="'btn-wh-check-' + l.id" [disabled]="!l.token_configurado" (click)="webhook(l, 'ver')"
+                    [matTooltip]="'com.admin.wh_check' | translate" [attr.aria-label]="'com.admin.wh_check' | translate"><mat-icon>sync</mat-icon></button>
                 </div>
                 @if (l.ultimo_error) { <p class="err small"><mat-icon>error</mat-icon>{{ l.ultimo_error }}</p> }
               </section>
@@ -345,7 +358,9 @@ export class RecargaDialogComponent {
     .chips { display: flex; flex-wrap: wrap; gap: 6px; }
     .chip { padding: 2px 10px; border-radius: 8px; font: var(--mat-sys-label-medium); background: var(--md-sys-color-surface-container-highest);
       &.ok { background: var(--md-sys-color-primary-container); color: var(--md-sys-color-on-primary-container); }
-      &[data-q='RED'] { background: var(--md-sys-color-error-container); color: var(--md-sys-color-on-error-container); } }
+      &[data-q='RED'] { background: var(--md-sys-color-error-container); color: var(--md-sys-color-on-error-container); }
+      &.warn { background: var(--md-sys-color-tertiary-container); color: var(--md-sys-color-on-tertiary-container); } }
+    .whrow { display: flex; flex-wrap: wrap; align-items: center; gap: 4px 8px; .wh-url { overflow-wrap: anywhere; flex: 1 1 260px; } }
     .grid2 { display: grid; grid-template-columns: repeat(auto-fit, minmax(220px, 1fr)); gap: 6px 16px; overflow-wrap: anywhere; }
     .err { display: flex; align-items: center; gap: 6px; color: var(--md-sys-color-error); margin: 0; }
     .small { font: var(--mat-sys-body-small); }
@@ -411,6 +426,22 @@ export default class ComunicacionesAdminPage {
     const msg = r.data.pasos.map(linea).join('\n');
     if (r.data.ok) await this.dialogs.info({ title: this.i18n.t('com.admin.test_ok'), message: msg });
     else await this.dialogs.error({ title: this.i18n.t('com.admin.test_fail'), message: msg });
+    await this.cargar();
+  }
+
+  /** A dónde manda Meta los mensajes del número: revisar, recibirlos aquí (webhook alterno del número) o devolverlos a la URL de la app. */
+  async webhook(l: LineaAdmin, accion: 'ver' | 'activar' | 'quitar'): Promise<void> {
+    if (accion !== 'ver') {
+      const url = l.webhook_efectivo ?? '—';
+      const ok = await this.dialogs.confirm(accion === 'activar'
+        ? { title: this.i18n.t('com.admin.wh_activate_title'), message: this.i18n.t('com.admin.wh_activate_msg', { url }), confirmText: this.i18n.t('com.admin.wh_activate') }
+        : { title: this.i18n.t('com.admin.wh_restore_title'), message: this.i18n.t('com.admin.wh_restore_msg'), confirmText: this.i18n.t('com.admin.wh_restore'), danger: true });
+      if (!ok) return;
+    }
+    const r = await this.loading.wrap(() => this.com.webhookLinea(l.id, accion));
+    if (!r.action || !r.data) { await this.dialogs.error({ title: this.i18n.t('com.admin.wh_error'), message: r.mensaje }); await this.cargar(); return; }
+    if (r.data.aviso) await this.dialogs.info({ title: this.i18n.t('com.admin.step_webhook'), message: r.data.aviso });
+    else if (accion !== 'ver') this.snack.open(this.i18n.t(accion === 'activar' ? 'com.admin.wh_done_here' : 'com.admin.wh_done_restored'), undefined, { duration: 3000 });
     await this.cargar();
   }
 
