@@ -16,7 +16,7 @@ require_once '../cors.php';
 require_once '../auth.php';
 require_once '../_lib/_crm_import_contactos.php';
 
-$ctx = crmContext();
+$ctx = crmContext(CRM_MODULOS_CONTACTOS);
 requireRole('L2');
 $accion = (string)($_POST['accion'] ?? '');
 

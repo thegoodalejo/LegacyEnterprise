@@ -8,7 +8,7 @@ import { BrandSeeds } from '../theme/brand-scheme';
 
 // Misma jerarquía y lista que auth.php (ROLE_RANK / PRIVILEGES). Cambiar en los dos lados.
 export const ROLE_RANK: Record<string, number> = { Nuevo: 0, L0: 1, L1: 2, L2: 3, L3: 4, L4: 5, L5: 9 };
-export const MODULE_CODES: readonly ModuleCode[] = ['crm', 'agenda', 'servicios', 'pedidos', 'integraciones', 'gerencia'];
+export const MODULE_CODES: readonly ModuleCode[] = ['crm', 'comunicaciones', 'agenda', 'servicios', 'pedidos', 'integraciones', 'gerencia'];
 export const PRIVILEGES = ['usuarios', 'archivos', ...MODULE_CODES] as const;
 export type Privilege = (typeof PRIVILEGES)[number];
 

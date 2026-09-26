@@ -10,7 +10,7 @@ require_once '../cors.php';
 require_once '../auth.php';
 require_once '../_lib/_crm_ventas.php';
 
-$ctx = crmContext();
+$ctx = crmContext(CRM_MODULOS_CONTACTOS);   // un lote de ventas exige además el CRM (abajo)
 requireRole('L2');
 $id = (int)($_POST['id_importacion'] ?? 0);
 
@@ -19,6 +19,7 @@ $conn->begin_transaction();
 $lote = $id > 0 ? crmImportacion($conn, $ctx, $id) : null;
 if (!$lote) authFail(404, 'Importación no encontrada');
 if ($lote['estado'] === 'revertida') authFail(409, 'La importación ya estaba revertida');
+if ($lote['tipo'] !== 'contactos') requireModulo('crm');
 
 if ($lote['tipo'] === 'contactos') {
     $ids = array_map(static fn($r) => (int)$r['id'], crmRows($conn, 'SELECT id FROM crm_contactos WHERE id_sede = ? AND id_importacion = ? AND activo = 1', 'ii', [$ctx['id_sede'], $id]));

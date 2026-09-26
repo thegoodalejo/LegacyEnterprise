@@ -7,7 +7,7 @@ require_once '../cors.php';
 require_once '../auth.php';
 require_once '../_lib/_crm.php';
 
-$ctx = crmContext();
+$ctx = crmContext(CRM_MODULOS_CONTACTOS);
 requireRole('L2');
 
 $tabla = (string)($_POST['tabla'] ?? 'crm_contactos');
@@ -33,7 +33,7 @@ $conn->close();
 
 foreach ($rows as &$r) {
     $r['id'] = (int)$r['id'];
-    $r['id_usuario'] = (int)$r['id_usuario'];
+    $r['id_usuario'] = $r['id_usuario'] !== null ? (int)$r['id_usuario'] : null;   // null = el sistema (webhook de WhatsApp, worker)
     $r['detalle'] = $r['detalle'] ? json_decode($r['detalle'], true) : null;
 }
 

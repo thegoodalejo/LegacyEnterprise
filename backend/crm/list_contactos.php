@@ -6,7 +6,7 @@ require_once '../cors.php';
 require_once '../auth.php';
 require_once '../_lib/_crm.php';
 
-$ctx = crmContext();
+$ctx = crmContext(CRM_MODULOS_CONTACTOS);
 $filtros   = crmJsonParam('filtros') ?? [];
 $pagina    = max(1, (int)($_POST['pagina'] ?? 1));
 $porPagina = min(CRM_POR_PAGINA_MAX, max(1, (int)($_POST['por_pagina'] ?? 25)));

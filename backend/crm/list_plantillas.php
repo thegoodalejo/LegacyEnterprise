@@ -6,7 +6,7 @@ require_once '../auth.php';
 require_once '../_lib/_crm.php';
 require_once '../_lib/_crm_plantillas.php';
 
-crmContext();
+crmContext(CRM_MODULOS_CONTACTOS);
 requireRole('L4');
 
 $out = [];

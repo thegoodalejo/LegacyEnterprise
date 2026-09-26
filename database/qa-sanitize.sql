@@ -47,3 +47,36 @@ END//
 DELIMITER ;
 CALL le_qa_sanitize_crm();
 DROP PROCEDURE le_qa_sanitize_crm;
+
+-- ─── Comunicaciones (migraciones 010–014): WhatsApp ─────────────────────────────────────────────────────────────
+-- Nada en QA debe escribirle a un cliente real ni usar credenciales de PDN: líneas y apps inactivas y sin secretos (además QA tiene otra
+-- COM_SECRET_KEY: lo cifrado en PDN no se podría leer), cola del webhook vacía, campañas en curso pausadas. El contenido de las conversaciones
+-- y los números de WhatsApp son datos personales: se enmascaran. Tolera que las tablas aún no existan en PDN.
+DROP PROCEDURE IF EXISTS le_qa_sanitize_com;
+DELIMITER //
+CREATE PROCEDURE le_qa_sanitize_com()
+BEGIN
+  IF (SELECT COUNT(*) FROM information_schema.tables WHERE table_schema = DATABASE() AND table_name = 'com_lineas') > 0 THEN
+    UPDATE com_lineas SET activo = 0, access_token_enc = NULL, token_ultimos4 = NULL, suscrita_at = NULL, verificada_at = NULL;
+    UPDATE com_meta_apps SET activo = 0, app_secret_enc = NULL, verify_token_enc = NULL;
+    DELETE FROM com_entrantes;
+    UPDATE com_conversaciones SET wa_id = CONCAT('5550', LPAD(id, 8, '0')), nombre_perfil = IF(nombre_perfil IS NULL, NULL, CONCAT('Cliente ', id)),
+                                  resumen = IF(resumen IS NULL, NULL, CONCAT('Mensaje ', id)), variables = NULL;
+    UPDATE com_mensajes SET texto = IF(texto IS NULL, NULL, CONCAT('Mensaje ', id)), contenido = NULL, media_key = NULL, media_nombre = NULL
+     WHERE origen <> 'sistema';
+  END IF;
+  IF (SELECT COUNT(*) FROM information_schema.tables WHERE table_schema = DATABASE() AND table_name = 'crm_contacto_notas') > 0 THEN
+    UPDATE crm_contacto_notas SET nota = CONCAT('Nota ', id);
+  END IF;
+  IF (SELECT COUNT(*) FROM information_schema.tables WHERE table_schema = DATABASE() AND table_name = 'com_campanas') > 0 THEN
+    UPDATE com_campanas SET estado = 'pausada', motivo_pausa = 'QA: copia de PDN'
+     WHERE estado IN ('programada', 'enviando', 'esperando_saldo', 'esperando_cupo');
+    UPDATE com_campanas SET media_id = NULL, media_key = NULL;
+    UPDATE com_campana_destinatarios SET wa_id = CONCAT('5551', LPAD(id, 8, '0')), nombre = CONCAT('Destinatario ', id);
+    UPDATE com_bajas SET wa_id = CONCAT('5552', LPAD(id, 8, '0'));
+    UPDATE com_enlaces SET destino = 'https://example.com/';
+  END IF;
+END//
+DELIMITER ;
+CALL le_qa_sanitize_com();
+DROP PROCEDURE le_qa_sanitize_com;

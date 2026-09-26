@@ -6,7 +6,7 @@ require_once '../cors.php';
 require_once '../auth.php';
 require_once '../_lib/_crm.php';
 
-$ctx = crmContext();
+$ctx = crmContext(CRM_MODULOS_CONTACTOS);
 $aplicaA = $_POST['aplica_a'] ?? '';
 if ($aplicaA !== '' && !in_array($aplicaA, CRM_APLICA_A, true)) authFail(400, 'aplica_a inválido');
 

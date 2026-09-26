@@ -95,7 +95,8 @@ export interface ExportCampoDef { id: number; aplica_a: TipoContacto; etiqueta: 
 export interface PaginaExportContactos { contactos: ExportContacto[]; campos: ExportCampoDef[]; total: number; pagina: number; por_pagina: number }
 
 export interface EntradaHistorial {
-  id: number; accion: string; created_at: string; id_usuario: number; usuario: string | null;
+  /** null = lo hizo el sistema (mensaje de WhatsApp, chatbot, worker). */
+  id: number; accion: string; created_at: string; id_usuario: number | null; usuario: string | null;
   detalle: {
     tipo?: string; nombre?: string; origen?: string; lote?: string; rol?: string | null;
     cambios?: { campo: string; etiqueta?: string; antes: unknown; despues: unknown }[];
@@ -108,6 +109,12 @@ export interface EntradaHistorial {
     archivo?: string | null;
   } | null;
 }
+/** Nota de un contacto: bitácora interna compartida entre el CRM y Comunicaciones (la bandeja también escribe aquí). */
+export interface NotaContacto {
+  id: number; nota: string; origen: 'crm' | 'comunicaciones'; id_conversacion: number | null; created_at: string; updated_at: string; id_autor: number | null;
+  autor: string | null; puede_editar: boolean;
+}
+
 export interface ListaHistorial { historial: EntradaHistorial[]; total: number; pagina: number; por_pagina: number; desde: string; hay_anteriores: boolean }
 
 // ─── Oportunidades, embudo, catálogo y configuración ─────────────────────────────────────────────────────────────
@@ -328,6 +335,12 @@ export class CrmService {
   }
   listHistorial(idRegistro: number, desde: string | null, pagina: number, tabla: 'crm_contactos' | 'crm_oportunidades' = 'crm_contactos'): Promise<ApiResponse<ListaHistorial>> {
     return this.api.post('crm/list_historial.php', { tabla, id_contacto: idRegistro, desde, pagina });
+  }
+  listNotasContacto(idContacto: number, pagina = 1): Promise<ApiResponse<{ notas: NotaContacto[]; total: number; pagina: number; por_pagina: number }>> {
+    return this.api.post('crm/list_contacto_notas.php', { id_contacto: idContacto, pagina });
+  }
+  saveNotaContacto(d: { id?: number; id_contacto?: number; nota?: string; activo?: 0 | 1; id_conversacion?: number | null }): Promise<ApiResponse<{ id: number }>> {
+    return this.api.post('crm/save_contacto_nota.php', { ...d, id_conversacion: d.id_conversacion ?? undefined });
   }
   listCampos(soloActivos = false, aplicaA?: AplicaA): Promise<ApiResponse<{ campos: CampoDef[] }>> {
     return this.api.post('crm/list_campos.php', { solo_activos: soloActivos ? 1 : 0, aplica_a: aplicaA });

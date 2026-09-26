@@ -46,13 +46,28 @@ function auditRegistroVarios(mysqli $conn, int $idSede, string $modulo, string $
 {
     $u = $GLOBALS['authUser'] ?? null;
     if (!$u || !$idsRegistro) return;
+    _historialInsertar($conn, $idSede, $modulo, $tabla, $idsRegistro, (int)$u['id'], $accion, $detalle);
+}
+
+/**
+ * Historial de algo que hizo el SISTEMA, sin usuario en sesión (webhook de WhatsApp, worker, cron): id_usuario NULL, y el perfil lo muestra
+ * como «Sistema». Conviene poner en $detalle el origen (p. ej. ['origen' => 'whatsapp']).
+ */
+function auditRegistroSistema(mysqli $conn, int $idSede, string $modulo, string $tabla, int $idRegistro, string $accion, array $detalle = []): void
+{
+    _historialInsertar($conn, $idSede, $modulo, $tabla, [$idRegistro], null, $accion, $detalle);
+}
+
+function _historialInsertar(mysqli $conn, int $idSede, string $modulo, string $tabla, array $idsRegistro, ?int $idUsuario, string $accion, array $detalle): void
+{
+    if (!$idsRegistro) return;
     $json = $detalle ? json_encode($detalle, JSON_UNESCAPED_UNICODE) : null;
     $stmt = $conn->prepare(
         'INSERT INTO le_H_registros (id_sede, modulo, tabla, id_registro, id_usuario, accion, detalle) VALUES (?, ?, ?, ?, ?, ?, ?)');
     if (!$stmt) { error_log('[historial] ' . $conn->error); return; }
     foreach ($idsRegistro as $idRegistro) {
         $id = (int)$idRegistro;
-        $stmt->bind_param('issiiss', $idSede, $modulo, $tabla, $id, $u['id'], $accion, $json);
+        $stmt->bind_param('issiiss', $idSede, $modulo, $tabla, $id, $idUsuario, $accion, $json);
         if (!$stmt->execute()) error_log('[historial] ' . $stmt->error);
     }
     $stmt->close();

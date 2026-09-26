@@ -133,7 +133,11 @@ export class HistorialDialogComponent {
 
   private describir(e: EntradaHistorial): Linea {
     const det = e.detalle ?? {};
-    const base = { id: e.id, usuario: e.usuario ?? '—', fecha: formatDateTime(e.created_at), lote: !!det.lote };
+    // Sin usuario: lo hizo el sistema (un mensaje de WhatsApp creó el contacto, el chatbot guardó un dato…).
+    const sistema = e.id_usuario === null
+      ? this.t('crm.hist.system') + (det.origen === 'whatsapp' ? ' · WhatsApp' : det.origen === 'chatbot' ? ' · ' + this.t('crm.hist.chatbot') : '')
+      : null;
+    const base = { id: e.id, usuario: sistema ?? e.usuario ?? '—', fecha: formatDateTime(e.created_at), lote: !!det.lote };
     const rol = det.rol ? ` (${det.rol})` : '';
     const tagsLote = Array.isArray(det.tags) ? det.tags.map(n => `«${n}»`).join(', ') : '';
     switch (e.accion) {
@@ -142,6 +146,7 @@ export class HistorialDialogComponent {
           ...base, icon: 'add_circle', titulo: this.t('crm.hist.created'),
           detalles: [
             ...(det.origen === 'referencia_de_organizacion' ? [this.t('crm.hist.created_as_ref')] : []),
+            ...(det.origen === 'whatsapp' ? [this.t('crm.hist.created_from_whatsapp')] : []),
             ...(det.archivo ? [this.t('crm.hist.from_import', { file: det.archivo })] : []),
           ],
         };
@@ -152,6 +157,7 @@ export class HistorialDialogComponent {
           if (det.tags.quitados.length) d.push(this.t('crm.hist.tags_removed', { tags: det.tags.quitados.map(n => `«${n}»`).join(', ') }));
         }
         if (det.origen === 'importacion' && det.archivo) d.push(this.t('crm.hist.from_import', { file: det.archivo }));
+        if (det.origen === 'chatbot') d.push(this.t('crm.hist.by_chatbot'));
         return { ...base, icon: 'edit', titulo: this.t('crm.hist.updated'), detalles: d };
       }
       case 'archivado':

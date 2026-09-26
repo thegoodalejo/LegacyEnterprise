@@ -8,7 +8,7 @@ require_once '../cors.php';
 require_once '../auth.php';
 require_once '../_lib/_crm.php';
 
-$ctx = crmContext();
+$ctx = crmContext(CRM_MODULOS_CONTACTOS);
 $accion = (string)($_POST['accion'] ?? '');
 if (in_array($accion, ['archivar', 'restaurar'], true)) requireRole('L2');
 elseif (!in_array($accion, ['tags_agregar', 'tags_quitar'], true)) authFail(400, 'Acción inválida');

@@ -14,7 +14,7 @@ require_once __DIR__ . '/db_connection.php';
 const ROLE_RANK = ['Nuevo' => 0, 'L0' => 1, 'L1' => 2, 'L2' => 3, 'L3' => 4, 'L4' => 5, 'L5' => 9];
 
 // Módulos de la suite (catálogo le_modulos). Mantener igual a ModuleCode en app-modules.ts.
-const MODULES = ['crm', 'agenda', 'servicios', 'pedidos', 'integraciones', 'gerencia'];
+const MODULES = ['crm', 'comunicaciones', 'agenda', 'servicios', 'pedidos', 'integraciones', 'gerencia'];
 
 // Lista cerrada de privilegios. Mantener igual a PRIVILEGES en session.service.ts.
 // Los códigos de módulo son también privilegios: dan acceso a ese módulo a L0–L3 (L4+ los ve todos).
@@ -167,6 +167,26 @@ function requireModulo(string $codigo): int
     $conn->close();
     if (!in_array($codigo, $habilitados, true)) authFail(403, 'Módulo no habilitado en esta sede: ' . $codigo);
     if (!in_array($codigo, modulosUsuario($GLOBALS['authUser'], $habilitados), true)) authFail(403, 'Sin acceso al módulo: ' . $codigo);
+    return $idSede;
+}
+
+/**
+ * Como requireModulo, pero basta con UNO de los módulos (contratado en la sede y con acceso del usuario).
+ * Lo usan los datos compartidos entre módulos: los contactos y las etiquetas son del CRM y de Comunicaciones.
+ * Devuelve la sede.
+ */
+function requireModuloAlguno(array $codigos): int
+{
+    if (count($codigos) === 1) return requireModulo($codigos[0]);
+    $idSede = requireSede();
+    $conn = conectar();
+    $habilitados = modulosSede($conn, $idSede);
+    $conn->close();
+    $contratados = array_values(array_intersect($codigos, $habilitados));
+    if (!$contratados) authFail(403, 'Módulo no habilitado en esta sede: ' . implode(' o ', $codigos));
+    if (!array_intersect($contratados, modulosUsuario($GLOBALS['authUser'], $habilitados))) {
+        authFail(403, 'Sin acceso al módulo: ' . implode(' o ', $contratados));
+    }
     return $idSede;
 }
 

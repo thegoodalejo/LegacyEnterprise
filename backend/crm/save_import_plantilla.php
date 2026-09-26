@@ -7,7 +7,7 @@ require_once '../cors.php';
 require_once '../auth.php';
 require_once '../_lib/_crm.php';
 
-$ctx = crmContext();
+$ctx = crmContext(($_POST['tipo'] ?? 'ventas') === 'contactos' ? CRM_MODULOS_CONTACTOS : ['crm']);
 requireRole('L2');
 $nombre = crmClean($_POST['nombre'] ?? null, 80, 'Nombre', true);
 $activo = isset($_POST['activo']) ? (($_POST['activo'] === '1') ? 1 : 0) : 1;

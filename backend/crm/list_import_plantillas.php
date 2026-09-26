@@ -5,7 +5,7 @@ require_once '../cors.php';
 require_once '../auth.php';
 require_once '../_lib/_crm.php';
 
-$ctx = crmContext();
+$ctx = crmContext(($_POST['tipo'] ?? 'ventas') === 'contactos' ? CRM_MODULOS_CONTACTOS : ['crm']);
 $tipo = (string)($_POST['tipo'] ?? 'ventas');
 if (!in_array($tipo, ['ventas', 'contactos'], true)) authFail(400, 'Tipo de plantilla inválido');
 $conn = conectar();

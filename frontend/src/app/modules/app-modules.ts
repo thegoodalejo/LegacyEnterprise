@@ -6,7 +6,7 @@
  */
 import type { AccessRule } from '../services/session.service';
 
-export type ModuleCode = 'crm' | 'agenda' | 'servicios' | 'pedidos' | 'integraciones' | 'gerencia';
+export type ModuleCode = 'crm' | 'comunicaciones' | 'agenda' | 'servicios' | 'pedidos' | 'integraciones' | 'gerencia';
 
 export interface ModuleNavItem {
   path: string;
@@ -34,6 +34,19 @@ export const APP_MODULES: readonly AppModule[] = [
       { path: '/m/crm/ventas', icon: 'point_of_sale', label: 'nav.crm.ventas' },
       { path: '/m/crm/metas', icon: 'flag', label: 'nav.crm.metas' },
       { path: '/m/crm/configuracion', icon: 'tune', label: 'nav.crm.configuracion', rule: { minRole: 'L4' } },
+    ],
+  },
+  {
+    // Contactos aparece también aquí: son los mismos del CRM (un cliente que solo compró Comunicaciones los necesita igual).
+    code: 'comunicaciones', icon: 'forum', label: 'modules.comunicaciones', tone: 'secondary',
+    nav: [
+      { path: '/m/comunicaciones/bandeja', icon: 'inbox', label: 'nav.com.bandeja' },
+      { path: '/m/comunicaciones/chatbot', icon: 'smart_toy', label: 'nav.com.chatbot', rule: { minRole: 'L2' } },
+      { path: '/m/comunicaciones/plantillas', icon: 'article', label: 'nav.com.plantillas', rule: { minRole: 'L2' } },
+      { path: '/m/comunicaciones/campanas', icon: 'campaign', label: 'nav.com.campanas', rule: { minRole: 'L2' } },
+      { path: '/m/comunicaciones/contactos', icon: 'contacts', label: 'nav.com.contactos' },
+      { path: '/m/comunicaciones/creditos', icon: 'toll', label: 'nav.com.creditos' },
+      { path: '/m/comunicaciones/configuracion', icon: 'tune', label: 'nav.com.configuracion', rule: { minRole: 'L4' } },
     ],
   },
   {

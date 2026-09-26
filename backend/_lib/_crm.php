@@ -28,10 +28,17 @@ function crmOk(array $data = [], string $mensaje = 'OK'): void
     exit;
 }
 
-/** Sesión del CRM: exige módulo contratado y con acceso. id_sede e id_empresa son los de la sesión. */
-function crmContext(): array
+// Contactos, vínculos, etiquetas, campos, roles y vocabulario son compartidos: los usa el CRM y también Comunicaciones (una sede
+// que solo contrató el chatbot tiene su libreta de contactos igual). Oportunidades, ventas, metas y catálogo siguen siendo solo del CRM.
+const CRM_MODULOS_CONTACTOS = ['crm', 'comunicaciones'];
+
+/**
+ * Sesión del CRM: exige módulo contratado y con acceso (basta uno de $modulos). id_sede e id_empresa son los de la sesión.
+ * Los endpoints de datos compartidos pasan CRM_MODULOS_CONTACTOS; el resto, nada (solo 'crm').
+ */
+function crmContext(array $modulos = ['crm']): array
 {
-    $idSede = requireModulo('crm');
+    $idSede = requireModuloAlguno($modulos);
     $u = $GLOBALS['authUser'];
     return ['id_sede' => $idSede, 'id_empresa' => (int)$u['id_empresa'], 'id_usuario' => (int)$u['id'], 'rol' => $u['rol']];
 }

@@ -6,7 +6,7 @@ require_once '../cors.php';
 require_once '../auth.php';
 require_once '../_lib/_crm.php';
 
-$ctx = crmContext();
+$ctx = crmContext(CRM_MODULOS_CONTACTOS);
 $id = (int)($_POST['id'] ?? 0);
 
 $conn = conectar();

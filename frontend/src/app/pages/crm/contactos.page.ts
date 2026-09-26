@@ -1,4 +1,4 @@
-import { ChangeDetectionStrategy, Component, computed, effect, inject, signal, untracked } from '@angular/core';
+import { ChangeDetectionStrategy, Component, computed, effect, inject, input, signal, untracked } from '@angular/core';
 import { FormsModule } from '@angular/forms';
 import { Router } from '@angular/router';
 import { MatDialog } from '@angular/material/dialog';
@@ -31,6 +31,7 @@ import { ContactosImportResult, abrirImportarContactos } from './contactos-impor
 import { abrirImportacionesContactos } from './contactos-importaciones-dialog.component';
 import { formatDate } from './crm-format';
 import { TranslatedPaginatorIntl } from './translated-paginator-intl';
+import { CampanaHandoffService } from '../comunicaciones/campana-handoff.service';
 
 interface FiltroCampoUI { key: number; id_campo: number | null; op: string; valor: string; valor2: string }
 
@@ -344,6 +345,9 @@ const OP_KEY: Record<string, string> = {
           <strong class="bulk-count">{{ 'crm.select.count' | translate: { n: countSel() } }}</strong>
           <button mat-button id="btn-bulk-tag" (click)="bulkTags('tags_agregar')"><mat-icon>label</mat-icon>{{ 'crm.bulk.tag' | translate }}</button>
           <button mat-button id="btn-bulk-untag" (click)="bulkTags('tags_quitar')"><mat-icon>label_off</mat-icon>{{ 'crm.bulk.untag' | translate }}</button>
+          @if (puedeCampana()) {
+            <button mat-button id="btn-bulk-campaign" (click)="crearCampana()"><mat-icon>campaign</mat-icon>{{ 'com.camp.from_contacts' | translate }}</button>
+          }
           @if (canDelete()) {
             <button mat-flat-button id="btn-bulk-delete" class="danger" (click)="bulkDelete()">
               <mat-icon>{{ estado() === 'archivados' ? 'restore_from_trash' : 'delete' }}</mat-icon>{{ (estado() === 'archivados' ? 'crm.restore' : 'crm.delete') | translate }}
@@ -475,6 +479,11 @@ export default class ContactosPage {
   readonly pageSomeSel = computed(() => this.rows().some(r => this.isSel(r.id)));
   readonly columns = computed(() => [...(this.seleccionando() ? ['sel'] : []), 'nombre', 'contacto', 'relacion', 'tags', 'creado', 'acciones']);
   readonly canDelete = computed(() => this.session.hasMinRole('L2'));
+  /** Ruta de Contactos del módulo en el que se está (data.base; por defecto la del CRM): los perfiles se abren dentro del mismo módulo. */
+  readonly base = input<string>('/m/crm/contactos');
+  private handoff = inject(CampanaHandoffService);
+  /** «Campaña de WhatsApp» con la selección: con el módulo Comunicaciones y L2+. */
+  readonly puedeCampana = computed(() => this.session.hasModule('comunicaciones') && this.session.hasMinRole('L2'));
   /** Qué se puede exportar ahora: la selección (si hay), los resultados del filtro o todo. */
   readonly exportAlcances = computed<ExportAlcance[]>(() => {
     const t = (k: string, p?: Record<string, string | number>) => this.i18n.t(k, p);
@@ -620,6 +629,15 @@ export default class ContactosPage {
     this.totalEsperado.set(0);
   }
 
+  /** Lleva la selección (o «todos los resultados del filtro») a una campaña nueva de WhatsApp. */
+  crearCampana(): void {
+    const sel = this.seleccion();
+    const audiencia = 'ids' in sel ? { ids: sel.ids } : { filtros: sel.filtros, excluidos: sel.excluidos };
+    const desc = this.modoFiltro() ? this.describirFiltros() : [this.i18n.t('crm.export.selection_manual', { n: this.countSel() })];
+    this.handoff.dejar(audiencia, this.countSel(), desc);
+    void this.router.navigate(['/m/comunicaciones/campanas', 'nueva']);
+  }
+
   private seleccion(): Seleccion {
     return this.modoFiltro()
       ? { filtros: this.filtros(), excluidos: [...this.excluidos()], total_esperado: this.totalEsperado() }
@@ -713,7 +731,7 @@ export default class ContactosPage {
 
   open(c: ContactoFila): void {
     if (this.seleccionando()) { this.toggleRow(c.id); return; }
-    void this.router.navigate(['/m/crm/contactos', c.id]);
+    void this.router.navigate([this.base(), c.id]);
   }
 
   async deleteOne(c: ContactoFila): Promise<void> {

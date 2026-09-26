@@ -5,7 +5,7 @@ require_once '../cors.php';
 require_once '../auth.php';
 require_once '../_lib/_crm_oportunidades.php';
 
-$ctx = crmContext();
+$ctx = crmContext(CRM_MODULOS_CONTACTOS);
 $conn = conectar();
 $cfg = crmConfig($conn, $ctx['id_empresa']);
 $conn->close();

@@ -10,7 +10,7 @@ require_once '../cors.php';
 require_once '../auth.php';
 require_once '../_lib/_crm.php';
 
-$ctx = crmContext();
+$ctx = crmContext(CRM_MODULOS_CONTACTOS);
 $sel = crmJsonParam('seleccion') ?? [];
 $pagina    = max(1, (int)($_POST['pagina'] ?? 1));
 $porPagina = min(CRM_EXPORT_PAGINA_MAX, max(1, (int)($_POST['por_pagina'] ?? 500)));

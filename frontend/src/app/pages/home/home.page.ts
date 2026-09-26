@@ -1,5 +1,5 @@
 import { ChangeDetectionStrategy, Component, inject } from '@angular/core';
-import { RouterLink } from '@angular/router';
+import { Router, RouterLink } from '@angular/router';
 import { MatIcon } from '@angular/material/icon';
 import { BrandingService } from '../../services/branding.service';
 import { SessionService } from '../../services/session.service';
@@ -76,4 +76,17 @@ import { TranslatePipe } from '../../services/translation.service';
 export default class HomePage {
   readonly brand = inject(BrandingService);
   readonly session = inject(SessionService);
+  private router = inject(Router);
+
+  constructor() {
+    // Con un solo módulo (p. ej. un cliente que compró solo Comunicaciones), la primera entrada va directo a él. Solo la primera vez en
+    // la sesión de la app: si después vuelve a Inicio (logo), se queda aquí y ve los accesos de administración.
+    const mods = this.session.modules();
+    if (mods.length === 1 && !this.session.isNuevo() && !HomePage.yaEntro) {
+      HomePage.yaEntro = true;
+      void this.router.navigateByUrl('/m/' + mods[0].code, { replaceUrl: true });
+    }
+    HomePage.yaEntro = true;
+  }
+  private static yaEntro = false;
 }

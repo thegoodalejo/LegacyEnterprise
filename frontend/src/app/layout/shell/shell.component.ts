@@ -32,6 +32,7 @@ const HOME_NAV: GuardedNavItem[] = [
   { path: '/admin/usuarios', icon: 'group', label: 'nav.admin.usuarios', anyOf: [{ minRole: 'L4' }, { privilege: 'usuarios' }] },
   { path: '/admin/empresas', icon: 'domain', label: 'nav.admin.empresas', rule: { minRole: 'L5' } },
   { path: '/admin/sedes', icon: 'store', label: 'nav.admin.sedes', rule: { minRole: 'L5' } },
+  { path: '/admin/comunicaciones', icon: 'forum', label: 'nav.admin.comunicaciones', rule: { minRole: 'L5' } },
 ];
 
 @Component({

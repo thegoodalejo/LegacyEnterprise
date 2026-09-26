@@ -52,6 +52,7 @@ services:
       R2_BUCKET: ${R2_BUCKET}                   # legacyenterprise-prod
       R2_BUCKET_PRIVATE: ${R2_BUCKET_PRIVATE}   # legacyenterprise-prod-private
       R2_PUBLIC_URL: ${R2_PUBLIC_URL}
+      COM_SECRET_KEY: ${COM_SECRET_KEY}         # Comunicaciones: cifra los secretos de Meta (32 bytes en base64, propia de cada entorno)
     labels:
       legacy.app: "legacyenterprise"
       legacy.env: "production"

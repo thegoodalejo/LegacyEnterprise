@@ -6,7 +6,7 @@ require_once '../cors.php';
 require_once '../auth.php';
 require_once '../_lib/_crm.php';
 
-$ctx = crmContext();
+$ctx = crmContext(CRM_MODULOS_CONTACTOS);
 $id = (int)($_POST['id_contacto'] ?? 0);
 $tagIds = crmJsonParam('tag_ids');
 if ($tagIds === null) authFail(400, 'tag_ids requerido');

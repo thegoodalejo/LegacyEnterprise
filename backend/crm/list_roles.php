@@ -6,7 +6,7 @@ require_once '../cors.php';
 require_once '../auth.php';
 require_once '../_lib/_crm.php';
 
-$ctx = crmContext();
+$ctx = crmContext(CRM_MODULOS_CONTACTOS);
 $soloActivos = ($_POST['solo_activos'] ?? '0') === '1' ? ' AND activo = 1' : '';
 
 $conn = conectar();

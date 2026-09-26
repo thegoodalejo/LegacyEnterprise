@@ -6,7 +6,7 @@ require_once '../cors.php';
 require_once '../auth.php';
 require_once '../_lib/_crm_ventas.php';
 
-$ctx = crmContext();
+$ctx = crmContext(($_POST['tipo'] ?? 'ventas') === 'contactos' ? CRM_MODULOS_CONTACTOS : ['crm']);
 $pagina = max(1, (int)($_POST['pagina'] ?? 1));
 $porPagina = min(CRM_POR_PAGINA_MAX, max(1, (int)($_POST['por_pagina'] ?? 25)));
 $tipo = (string)($_POST['tipo'] ?? 'ventas');

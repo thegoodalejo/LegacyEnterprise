@@ -4,6 +4,7 @@ import { MatDialog } from '@angular/material/dialog';
 import { MatButton, MatIconButton } from '@angular/material/button';
 import { MatIcon } from '@angular/material/icon';
 import { MatTooltip } from '@angular/material/tooltip';
+import { ContactoNotasComponent } from '../../components/contacto-notas.component';
 import { TagChipComponent } from '../../components/tag-chip.component';
 import { TagPickerDialogComponent, TagPickerResult } from '../../components/tag-picker-dialog.component';
 import { CrmConfigService } from '../../services/crm-config.service';
@@ -20,18 +21,24 @@ import { MetaBarComponent, MetaEstadoComponent, periodoDe, valorMetrica } from '
 import { abrirOportunidadDialog } from './oportunidad-dialog.component';
 import { VentasUiService } from './venta-manual-dialog.component';
 import { rangoPeriodo } from './ventas.page';
+import { ContactoConversacionesComponent } from '../comunicaciones/contacto-conversaciones.component';
 
-/** Perfil de un Persona u Organización: datos, vínculos, etiquetas, campos personalizados, auditoría e historial. */
+/**
+ * Perfil de un Persona u Organización: datos, vínculos, etiquetas, campos personalizados, notas, auditoría e historial.
+ * Lo usan el CRM y Comunicaciones (mismos contactos): `base` es la ruta de Contactos del módulo en el que se está; las tarjetas de CRM
+ * (oportunidades, ventas, metas) solo con el CRM y la de conversaciones solo con Comunicaciones.
+ */
 @Component({
   selector: 'app-contacto-perfil-page',
   changeDetection: ChangeDetectionStrategy.OnPush,
-  imports: [RouterLink, MatButton, MatIconButton, MatIcon, MatTooltip, TagChipComponent, MetaBarComponent, MetaEstadoComponent, TranslatePipe],
+  imports: [RouterLink, MatButton, MatIconButton, MatIcon, MatTooltip, TagChipComponent, MetaBarComponent, MetaEstadoComponent, ContactoNotasComponent,
+    ContactoConversacionesComponent, TranslatePipe],
   template: `
     <div class="page">
       @if (d(); as det) {
         @let c = det.contacto;
         <header class="head">
-          <a mat-icon-button routerLink="/m/crm/contactos" [attr.aria-label]="'crm.back' | translate"><mat-icon>arrow_back</mat-icon></a>
+          <a mat-icon-button [routerLink]="base()" [attr.aria-label]="'crm.back' | translate"><mat-icon>arrow_back</mat-icon></a>
           <span class="avatar" [attr.data-tipo]="c.tipo" aria-hidden="true">
             @if (c.tipo === 'persona') { {{ ini() }} } @else { <mat-icon>business</mat-icon> }
           </span>
@@ -68,7 +75,7 @@ import { rangoPeriodo } from './ventas.page';
                 @if (docLabel()) { <div><dt>{{ 'crm.form.doc_number_org' | translate }}</dt><dd>{{ docLabel() }}</dd></div> }
                 @if (c.correo_facturacion) { <div><dt>{{ 'crm.form.correo_fact' | translate }}</dt><dd>{{ c.correo_facturacion }}</dd></div> }
                 @if (c.id_padre) {
-                  <div id="profile-parent"><dt>{{ 'crm.profile.parent' | translate }}</dt><dd><a class="inline-link" [routerLink]="['/m/crm/contactos', c.id_padre]">{{ c.padre_nombre }}</a></dd></div>
+                  <div id="profile-parent"><dt>{{ 'crm.profile.parent' | translate }}</dt><dd><a class="inline-link" [routerLink]="[base(), c.id_padre]">{{ c.padre_nombre }}</a></dd></div>
                 }
               }
               @if (c.telefono) { <div><dt>{{ 'crm.form.telefono' | translate }}</dt><dd>{{ c.telefono }}</dd></div> }
@@ -86,7 +93,7 @@ import { rangoPeriodo } from './ventas.page';
           <section class="card">
             <h2>{{ (c.tipo === 'organizacion' ? 'crm.profile.people' : 'crm.profile.orgs') | translate }}</h2>
             @for (v of det.vinculos; track v.id) {
-              <a class="link-row" [routerLink]="['/m/crm/contactos', v.id]">
+              <a class="link-row" [routerLink]="[base(), v.id]">
                 <mat-icon>{{ c.tipo === 'organizacion' ? 'person' : 'business' }}</mat-icon>
                 <span class="link-text">
                   <strong>{{ v.nombre_completo }}</strong>
@@ -101,7 +108,7 @@ import { rangoPeriodo } from './ventas.page';
             <section class="card" id="profile-children">
               <h2>{{ 'crm.profile.children' | translate }} ({{ det.hijas.length }})</h2>
               @for (h of det.hijas; track h.id) {
-                <a class="link-row" [routerLink]="['/m/crm/contactos', h.id]">
+                <a class="link-row" [routerLink]="[base(), h.id]">
                   <mat-icon>business</mat-icon>
                   <span class="link-text">
                     <strong>{{ h.nombre_completo }}</strong>
@@ -122,6 +129,18 @@ import { rangoPeriodo } from './ventas.page';
             </div>
           </section>
 
+          @if (conCom()) {
+            <section class="card" id="profile-conversations">
+              <app-contacto-conversaciones [idContacto]="c.id" [nombre]="c.nombre_completo" [tieneWhatsapp]="c.tipo === 'persona' && !!c.whatsapp_numero" />
+            </section>
+          }
+
+          <section class="card" id="profile-notes">
+            <h2>{{ 'notes.title' | translate }}</h2>
+            <app-contacto-notas [idContacto]="c.id" />
+          </section>
+
+          @if (conCrm()) {
           <section class="card" id="profile-opps">
             <div class="card-head">
               <h2>{{ 'crm.opp.of_contact' | translate }}</h2>
@@ -138,6 +157,7 @@ import { rangoPeriodo } from './ventas.page';
             } @empty { <p class="muted">—</p> }
             @if (oppsTotal() > opps().length) { <a mat-button routerLink="/m/crm/oportunidades" class="more-opps">{{ 'crm.opp.see_all' | translate: { n: oppsTotal() } }}</a> }
           </section>
+          }
 
           @if (ventasRes(); as vr) {
             <section class="card" id="profile-sales">
@@ -160,7 +180,7 @@ import { rangoPeriodo } from './ventas.page';
             </section>
           }
 
-          @if (c.tipo === 'organizacion') {
+          @if (c.tipo === 'organizacion' && conCrm()) {
             <section class="card" id="profile-goals">
               <div class="card-head">
                 <h2>{{ 'crm.goals.profile_title' | translate }}</h2>
@@ -195,7 +215,7 @@ import { rangoPeriodo } from './ventas.page';
       } @else if (notFound()) {
         <div class="empty-state">
           <mat-icon>search_off</mat-icon><strong>{{ 'crm.profile.not_found' | translate }}</strong>
-          <a mat-button routerLink="/m/crm/contactos">{{ 'crm.back' | translate }}</a>
+          <a mat-button [routerLink]="base()">{{ 'crm.back' | translate }}</a>
         </div>
       }
     </div>
@@ -238,6 +258,8 @@ import { rangoPeriodo } from './ventas.page';
 export default class ContactoPerfilPage {
   /** Parámetro :id de la ruta (component input binding). */
   readonly id = input<string>();
+  /** Ruta de Contactos del módulo desde el que se abrió (data.base de la ruta; por defecto la del CRM). */
+  readonly base = input<string>('/m/crm/contactos');
   private crm = inject(CrmService);
   private loading = inject(LoadingService);
   private dialogs = inject(DialogService);
@@ -257,6 +279,8 @@ export default class ContactoPerfilPage {
   readonly notFound = signal(false);
   readonly canAudit = computed(() => this.session.hasMinRole('L2'));
   readonly esAdmin = computed(() => this.session.hasMinRole('L4'));
+  readonly conCrm = computed(() => this.session.hasModule('crm'));
+  readonly conCom = computed(() => this.session.hasModule('comunicaciones'));
   readonly ini = computed(() => initials(this.d()?.contacto.nombre_completo ?? ''));
   readonly docLabel = computed(() => {
     const c = this.d()?.contacto;
@@ -276,8 +300,11 @@ export default class ContactoPerfilPage {
     this.notFound.set(false);
     const r = await this.loading.wrap(() => this.crm.getContacto(id));
     if (r.action && r.data) {
-      this.d.set(r.data); void this.loadOpps(id); void this.loadVentas(id, r.data.hijas.length > 0);
-      if (r.data.contacto.tipo === 'organizacion') void this.loadMetas(id);
+      this.d.set(r.data);
+      if (this.conCrm()) {
+        void this.loadOpps(id); void this.loadVentas(id, r.data.hijas.length > 0);
+        if (r.data.contacto.tipo === 'organizacion') void this.loadMetas(id);
+      }
     }
     else { this.d.set(null); this.notFound.set(true); }
   }
@@ -406,7 +433,7 @@ export default class ContactoPerfilPage {
     if (!ok) return;
     const r = await this.loading.wrap(() => this.crm.bulk(archivar ? 'archivar' : 'restaurar', { ids: [c.id] }));
     if (!r.action) { await this.dialogs.error({ title: this.i18n.t('crm.bulk.error'), message: r.mensaje }); return; }
-    if (archivar) await this.router.navigateByUrl('/m/crm/contactos');
+    if (archivar) await this.router.navigateByUrl(this.base());
     else await this.load();
   }
 }
