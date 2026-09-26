@@ -27,14 +27,16 @@ Detalle y **acciones pendientes del dueño** (comandos exactos): [docs/pendiente
 | 6. Hosting + PWA | ✅ publicado por CI, `no-cache` verificado, bundle apunta solo a la API de PDN |
 
 Cierre pendiente del dueño (limpieza de llaves y del usuario temporal de NPM): [docs/pendientes.md](docs/pendientes.md).
-El siguiente trabajo ya es de producto (módulos: CRM, Agenda, …). **CRM v1 de contactos** (Persona/Organización con jerarquía y roles,
-campos personalizados, etiquetas, historial, filtros, acciones en lote, vocabulario por empresa y plantillas por nicho) y **reportes PDF/Excel con
-la marca del cliente**, **oportunidades** (embudo configurable, tablero/lista, catálogo, líneas, notas, informe del embudo) y **ventas importadas**
-desde Excel/CSV (asistente con revisión previa, lotes revertibles, análisis por cliente/ítem/mes) o **registradas a mano** con un carrito (revisión
-en el servidor antes de confirmar, anulación con motivo; `id_importacion` NULL; también desde una **oportunidad ganada** con todo cargado, una
-venta activa por oportunidad, `id_oportunidad` en la migración 008) y **metas paramétricas** (métricas por empresa;
-metas de empresa, sede y organización con avance, ritmo esperado, cobertura, generación en lote e informe; panel en Oportunidades): definición,
-decisiones, hoja de ruta (oportunidades ✅ → ventas ✅ → metas ✅) y pendientes en [docs/modulos/crm.md](docs/modulos/crm.md).
+El trabajo ya es de producto (módulos: CRM, Agenda, …). **CRM: todo lo planeado está en producción (fases 0, A, B, B.1, B.2, C y D, 2026-09-25):**
+- **Contactos** Persona/Organización (jerarquía, roles, campos personalizados, etiquetas, historial, filtros, lote, mapa, vocabulario por empresa,
+  plantillas por nicho) e **importación desde Excel/CSV** (asistente, persona de referencia, «Pertenece a», lotes revertibles; migración 009).
+- **Reportes PDF/Excel** con la marca del cliente; **oportunidades** (embudo configurable, tablero/lista, catálogo, líneas, notas, informe).
+- **Ventas** importadas desde Excel/CSV (lotes revertibles, análisis por cliente/ítem/mes) o **registradas a mano** con un carrito (revisión en el
+  servidor, anulación con motivo; `id_importacion` NULL), también desde una **oportunidad ganada** (una venta activa por oportunidad; migración 008).
+- **Metas paramétricas** de empresa, sede y organización (avance, ritmo esperado, cobertura, generación en lote, informe; panel en Oportunidades).
+
+Todo el detalle —mapa del módulo, reglas, API, convenciones técnicas, puesta en marcha de un cliente, integración con otros módulos (para planear el
+siguiente), decisiones y backlog— en [docs/modulos/crm.md](docs/modulos/crm.md).
 
 ## Gitflow
 
@@ -111,3 +113,8 @@ decisiones, hoja de ruta (oportunidades ✅ → ventas ✅ → metas ✅) y pend
 - `window.__leDev` (login con token de prueba) existe solo en desarrollo: `ngDevMode` lo elimina del build de producción.
   Verificar tras tocar `app.ts`: `grep -l __leDev dist/legacyenterprise/browser/*.js` debe dar vacío.
 - Cambiar variables del `.env` en la VPS requiere `docker compose up -d` (recrear), no `apache2 reload`.
+- **Zona horaria:** PHP 8 no lee la variable `TZ` del contenedor (usaría UTC: de 7 p. m. a medianoche en Colombia «hoy» sería mañana).
+  `db_connection.php` la fija con `date_default_timezone_set(getenv('TZ') ?: 'America/Bogota')`; todo endpoint debe cargarlo **primero**.
+- **Importar fila por fila:** con `$GLOBALS['authFailLanza'] = true`, `authFail()` lanza `AuthFailException` en vez de responder; con un `SAVEPOINT`
+  por fila, una importación valida con las mismas funciones del formulario y sigue con la siguiente fila (`_lib/_crm_import_contactos.php`).
+  Apagarlo siempre al terminar la fila (lo hace `crmImpcProcesar`).

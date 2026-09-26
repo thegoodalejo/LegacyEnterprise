@@ -1,12 +1,20 @@
 # Módulo CRM — definición y estado
 
-> Documento vivo del CRM. Estado: **v1 de contactos** — contactos Persona/Organización con jerarquía, roles configurables,
-> campos personalizados, etiquetas, historial, filtros, búsqueda en relacionados, acciones en lote, vocabulario por empresa
-> y plantillas por nicho, más **reportes PDF/Excel con la marca del cliente** y **oportunidades** (embudo configurable, tablero y lista,
-> catálogo de ítems, líneas, notas, cierre con motivo), **ventas** importadas desde Excel/CSV (lotes revertibles, análisis por cliente, ítem y mes)
-> o **registradas a mano con un carrito** (revisión antes de confirmar, anulación con motivo; también desde una **oportunidad ganada**, con todo cargado)
-> y **metas paramétricas** (empresa → sede → organización, con avance, ritmo esperado, generación en lote e informe).
-> Actualizado: 2026-09-25. Actividades y cotizaciones: por definir.
+> Documento vivo del CRM. **Estado al 2026-09-25: todo lo planeado está en producción** (fases 0, A, B, B.1, B.2, C y D de la *Hoja de ruta*):
+> - **Contactos** Persona/Organización con jerarquía, roles, campos personalizados, etiquetas, historial, filtros, búsqueda en relacionados, acciones
+>   en lote, ubicación en el mapa, vocabulario por empresa, plantillas por nicho e **importación desde Excel/CSV** (con lotes revertibles).
+> - **Reportes PDF/Excel** con la marca del cliente en toda lista o panel.
+> - **Oportunidades**: embudo configurable, tablero y lista, catálogo de ítems, líneas, notas, cierre con motivo.
+> - **Ventas** importadas desde Excel/CSV (lotes revertibles, análisis por cliente, ítem y mes) o **registradas a mano con un carrito** (revisión antes
+>   de confirmar, anulación con motivo), también desde una **oportunidad ganada** con todo cargado.
+> - **Metas paramétricas** (empresa → sede → organización) con avance, ritmo esperado, generación en lote e informe.
+>
+> Lo que queda es backlog (ver *Pendientes*). Para planear lo que sigue: *Integración con otros módulos* y *Puesta en marcha de un cliente*.
+
+**Contenido:** Objetivo · Principios · Glosario · Pilotos · Mapa del módulo · Modelo de datos · Campos personalizados · Etiquetas · Historial ·
+Filtros y búsqueda · Selección y lote · Importar contactos · Ubicación en el mapa · Oportunidades · Ventas (importación, venta manual, venta desde una
+oportunidad) · Metas · Reportes · Vocabulario · Plantillas · Permisos · API · Frontend · Convenciones técnicas · Cómo probarlo · Puesta en marcha de
+un cliente · Integración con otros módulos · Hoja de ruta · Decisiones · Pendientes.
 
 ## Objetivo
 
@@ -53,6 +61,21 @@ Tres empresas de nichos distintos contra las que se valida cada abstracción:
 | B | Mantenimiento de plantas de agua | **Organización** (la planta) | Una o más Personas por planta | Área m², capacidad L/s |
 | C | Clínica estética | **Persona** (cliente final) | La propia persona | Talla, peso, última visita |
 
+## Mapa del módulo
+
+Pantallas (`/m/crm/…`, menú del CRM), qué se hace en cada una, con qué endpoints (`backend/crm/`) y sobre qué tablas. «Módulo» = cualquier usuario con
+acceso al CRM en la sede (L4, o L0–L3 con el privilegio `crm`); L2 y L4 son los mínimos de las acciones marcadas.
+
+| Pantalla | Qué se hace | Endpoints | Tablas |
+|---|---|---|---|
+| **Contactos** `contactos` | Listado paginado con filtros combinables; crear Persona u Organización; seleccionar y etiquetar/quitar/archivar/restaurar en lote (archivar: L2); exportar PDF/Excel; **importar** desde Excel/CSV e importaciones anteriores (L2) | `list_contactos`, `save_contacto`, `bulk_contactos`, `export_contactos`, `import_contactos`, `list_importaciones` (`tipo=contactos`), `revertir_importacion`, `list_import_plantillas`/`save_import_plantilla` | `crm_contactos` (+ extensiones), `crm_contacto_tags`, `crm_campos_valores`, `crm_contacto_vinculos`, `crm_importaciones` |
+| **Perfil** `contactos/:id` | Datos, ubicación, vínculos, dependientes, etiquetas, campos, oportunidades (crear una), ventas de 12 meses («Registrar venta», L2), metas (organización), historial (L2), editar, archivar | `get_contacto`, `save_contacto`, `set_contacto_tags`, `list_historial`, `list_oportunidades`, `list_ventas`, `list_metas`, `save_venta` | las anteriores + `crm_oportunidades`, `crm_ventas`, `crm_metas`, `le_H_registros` |
+| **Oportunidades** `oportunidades` | Panel de metas; tablero (arrastrar entre etapas) o lista; lote; exportar el informe del embudo; «Registrar venta» / «Ver venta» en las ganadas | `list_oportunidades` (`vista` lista/tablero), `move_oportunidad`, `bulk_oportunidades`, `export_oportunidades`, `list_metas` (`vista=panel`), `save_venta` | `crm_oportunidades` (+ líneas, notas, valores, tags), `crm_embudos`, `crm_etapas`, `crm_ventas` |
+| **Ficha** `oportunidades/:id` | Datos, líneas, tarjeta **Venta**, notas, etiquetas, campos, historial (L2), mover de etapa, editar, archivar, exportar la ficha | `get_oportunidad`, `save_oportunidad`, `move_oportunidad`, `list_notas`, `save_nota`, `list_historial` | `crm_oportunidades` y relacionadas |
+| **Ventas** `ventas` | Indicadores; por cliente, ítem y mes; detalle (anular/restaurar manuales, L2); **Nueva venta** (carrito) e **Importar ventas** (L2); importaciones (revertir, L2); exportar | `list_ventas`, `get_venta`, `save_venta`, `anular_venta`, `import_ventas`, `list_importaciones`, `revertir_importacion`, plantillas, `export_ventas` | `crm_ventas`, `crm_venta_lineas`, `crm_importaciones`, `crm_import_plantillas` |
+| **Metas** `metas` | Mes a mes: panel de empresa/sede/organizaciones y tabla; nueva meta, generar por organización y editar (L4); informe | `list_metas` (`vista` lista/panel/referencia), `save_meta`, `generar_metas`, `export_metas`, `list_metricas` | `crm_metricas`, `crm_metas` (+ ventas y oportunidades para el avance) |
+| **Configuración** `configuracion` (L4) | Pestañas: campos, etiquetas, embudo (moneda, embudos, etapas, motivos), catálogo, métricas, roles, vocabulario, plantillas | `list/save_campo`, `list/save_tag`, `save_tag_grupo`, `get/save_config`, `list/save_embudo`, `save_etapa`, `list/save_motivo`, `list/save_categoria_item`, `list/save_item`, `list/save_metrica`, `list/save_rol`, `list/save_vocabulario`, `list_plantillas`, `apply_plantilla` | tablas de configuración por empresa |
+
 ## Modelo de datos
 
 Migraciones `003_historial_registros.sql` (plataforma) y `004_crm_base.sql` (módulo, prefijo `crm_`). Patrón **party**:
@@ -60,7 +83,7 @@ una tabla base con un solo espacio de ids y una extensión 1–1 por tipo.
 
 | Tabla | Contenido |
 |---|---|
-| `crm_contactos` | Base: id, `id_sede`, tipo, `nombre_completo`, dirección, ciudad, **lat/lng (ubicación en el mapa, opcional)**, teléfono, responsable, `activo`, `busqueda` |
+| `crm_contactos` | Base: id, `id_sede`, tipo, `nombre_completo`, dirección, ciudad, **lat/lng (ubicación en el mapa, opcional)**, teléfono, responsable, `id_importacion` (el lote de «Importar contactos» que lo creó; migración `009`), `activo`, `busqueda` |
 | `crm_contactos_personas` | Extensión: nombres, apellidos, documento, correo, WhatsApp (indicativo + número), fecha de nacimiento |
 | `crm_contactos_organizaciones` | Extensión: razón social, documento (NIT…), correo de facturación, `id_padre` (organización a la que pertenece) |
 | `crm_roles_vinculo` | Roles de vínculo (por **empresa**): nombre, orden, activo |
@@ -78,8 +101,12 @@ una tabla base con un solo espacio de ids y una extensión 1–1 por tipo.
 | `crm_oportunidades` | Por **sede**: título, contacto (Persona u Organización), persona de contacto, responsable, embudo/etapa, valor, cierre estimado y real, estado, motivo, descripción, `etapa_desde`, `activo` |
 | `crm_oportunidad_lineas`, `crm_oportunidad_notas` | Líneas (ítem o descripción libre × cantidad × precio) y bitácora de notas (borrado lógico) |
 | `crm_oportunidad_valores`, `crm_oportunidad_tags` | Campos personalizados y etiquetas de las oportunidades (espejo de las de contactos: aquellas tienen FK a `crm_contactos`) |
-| `crm_importaciones`, `crm_ventas`, `crm_venta_lineas`, `crm_import_plantillas` | Ventas importadas por lotes o registradas a mano (migración `006`; `crm_ventas.id_oportunidad` en la `008`; ver *Ventas*) |
+| `crm_importaciones`, `crm_ventas`, `crm_venta_lineas`, `crm_import_plantillas` | Ventas importadas por lotes o registradas a mano (migración `006`; `crm_ventas.id_oportunidad` en la `008`; ver *Ventas*). Desde la `009`, `crm_importaciones` y `crm_import_plantillas` también tienen tipo `contactos` (ver *Importar contactos*) |
 | `crm_metricas`, `crm_metas` | Qué se mide y cuánto se espera de la empresa, la sede o una organización en un período (migración `007`, ver *Metas*) |
+
+**Migraciones del CRM:** `004` base de contactos · `005` oportunidades, embudo, catálogo y configuración · `006` ventas importadas · `007` metas ·
+`008` venta ↔ oportunidad · `009` importar contactos (la `003` es el historial genérico de plataforma). Todas idempotentes; las aplica
+`/opt/vps-tools/migrate.sh` en cada deploy (registra cada archivo en `schema_migrations`).
 
 **Ámbitos.** Los contactos son de una **sede** (`id_sede` siempre sale de la sesión). La configuración (campos,
 etiquetas) es de la **empresa**: todas sus sedes comparten el mismo catálogo.
@@ -129,14 +156,16 @@ conserva todo**; el perfil muestra por defecto los **últimos 3 meses** y «Ver 
 pequeño de historial (ícono `history`) en la cabecera del perfil. La tabla es genérica: Agenda, Pedidos, etc. la
 reutilizarán con `auditRegistro()`. Las ventas también la usan (`tabla = crm_ventas`: registrada a mano, anulada, restaurada, reemplazada por una
 importación) y la muestran en el detalle de cada venta (ver *Ventas → Venta manual*). Una oportunidad anota también lo de su venta (`venta_registrada`,
-`venta_anulada`, `venta_restaurada`, `venta_reemplazada`).
+`venta_anulada`, `venta_restaurada`, `venta_reemplazada`). Los contactos creados o actualizados por una importación llevan en su historial el origen
+y el archivo («Por la importación «clientes.xlsx»»), y los que se archivan al revertirla, «Al revertir la importación …».
 
 ## Filtros y búsqueda
 
 Todos combinables, con paginación en servidor:
 texto (nombre, teléfono, documento, correo: insensible a mayúsculas y tildes, por palabras sueltas, teléfonos y NIT sin
 formato), tipo, estado (activos / archivados / todos), responsable, creado por, rango de **fecha de creación**,
-**etiquetas** (cualquiera / todas), **campos personalizados** (operador según el tipo) y **«Pertenece a»** (organización padre).
+**etiquetas** (cualquiera / todas), **campos personalizados** (operador según el tipo), **«Pertenece a»** (organización padre) e **importación**
+(los que creó un lote de *Importar contactos*: chip «Importación: archivo»).
 La búsqueda de texto **incluye por defecto los registros relacionados**: cada palabra puede coincidir en el propio contacto o
 en los vinculados (se encuentra un negocio por el nombre o teléfono de su persona de referencia, y una persona por su negocio);
 se apaga con «Incluir registros relacionados al buscar» (filtro `relacionados: false`). El lote usa la misma búsqueda. Cada contacto muestra su
@@ -149,6 +178,155 @@ manda el filtro y los excluidos, no los N ids). Acciones: **Etiquetar**, **Quita
 Eliminar más de **5** exige escribir la palabra (`ELIMINAR` / `DELETE`). El servidor resuelve la selección dentro de la
 sede, rechaza si el total cambió (409) o supera **5.000**, opera en una transacción y responde
 `{procesados, sin_cambios, omitidos}` (p. ej. etiquetas que no aplican al tipo de contacto).
+
+## Importar contactos (Excel / CSV) — fase D
+
+Para cargar de una vez la base de clientes (el CRM anterior, el ERP, una hoja de Excel) en vez de crear los contactos uno por uno. Se importa **un tipo
+por archivo**: Personas **u** Organizaciones. Reutiliza lo de la importación de ventas (lectura en el navegador, revisión completa sin guardar, bloques,
+lotes revertibles, plantillas) y valida **cada fila con las mismas reglas del formulario**.
+
+### Dónde y quién
+
+*Contactos → Importar* (L2+) con dos opciones: **Importar desde Excel o CSV** (el asistente) e **Importaciones anteriores** (los lotes). L0–L1 no ven
+el botón y el servidor responde 403.
+
+### Formato del archivo
+
+- Igual que en ventas: **.xlsx** o **CSV** (separador y codificación automáticos, incluido el Windows-1252 del «CSV» de Excel en español), hasta 25 MB,
+  sin `.xls`; se detecta la **fila de encabezado** (salta títulos) y se elige la **hoja**; fechas en el formato elegido o celdas de fecha; números con
+  coma o punto decimal.
+- **Una fila por contacto.** Una celda vacía **no borra** nada.
+- Las columnas se proponen solas por el encabezado (sin tildes ni mayúsculas; primero coincidencias exactas, luego parciales; una columna por campo) y
+  se pueden cambiar. «Descargar formato de ejemplo» baja un `.xlsx` del tipo elegido con los encabezados que se reconocen solos (incluidos los campos
+  personalizados de la empresa) y dos filas de muestra.
+
+**Personas**
+
+| Campo | Encabezados que se reconocen (ejemplos) | Reglas |
+|---|---|---|
+| **Nombres** (obligatorio) | Nombres, Nombre, Nombre completo, Paciente, Cliente | Si el archivo trae el nombre completo en una sola columna, va aquí (apellidos vacíos). |
+| Apellidos | Apellidos, Apellido | |
+| Tipo de documento | Tipo documento, Tipo doc, Tipo identificación | Texto libre (CC, CE, NIT…), hasta 20. |
+| Número de documento | Documento, Cédula, Identificación, CC | Sirve para reconocer existentes. |
+| Correo | Correo, Email, Correo electrónico | Se valida el formato. |
+| Teléfono | Teléfono, Celular, Móvil | |
+| WhatsApp | WhatsApp, WA | Solo dígitos. Si empieza con el indicativo y tiene más de 10 dígitos, se separa; si no, se usa el **indicativo por defecto** (57). |
+| Fecha de nacimiento | Fecha de nacimiento, Nacimiento, Cumpleaños | |
+| Dirección, Ciudad | Dirección, Ciudad, Municipio | |
+| Latitud, Longitud | Latitud / Lat, Longitud / Lng / Lon | Las dos o ninguna. |
+| Responsable | Responsable, Vendedor, Asesor, Ejecutivo | **Nombre o correo** de un usuario activo de la sede. Desconocido → aviso y queda sin responsable (o con el por defecto). |
+| Etiquetas | Etiquetas, Tags | Nombres separados por «,», «;» o «\|». Deben existir, estar activas y aplicar a Personas; las demás se avisan y se ignoran. |
+| Organización | Organización, Empresa, Negocio, NIT empresa | **NIT** (solo dígitos, con o sin DV) o **nombre exacto** de una Organización **activa** de la sede. Crea el vínculo sin tocar las otras personas de la organización (queda principal si no tenía ninguna). No encontrada → error de la fila. |
+| Cargo en la organización | Rol, Cargo, Puesto | Rol de vínculo activo, por nombre. Desconocido → aviso y el vínculo queda sin rol. |
+| Campos personalizados de Persona | su etiqueta o su clave | Texto, entero, decimal, sí/no («Sí», «X», «true», «1», «No», «0»…) o fecha. |
+
+**Organizaciones**
+
+| Campo | Encabezados que se reconocen (ejemplos) | Reglas |
+|---|---|---|
+| **Razón social** (obligatorio) | Razón social, Nombre, Empresa, Negocio, Establecimiento, Tienda, Cliente | |
+| Tipo de documento, Número de documento | NIT, Documento, RUT, Identificación | El NIT sirve para reconocer existentes. |
+| Correo de facturación | Correo de facturación, Email facturación, Correo | |
+| Teléfono, Dirección, Ciudad, Latitud, Longitud, Responsable, Etiquetas | como en Personas | Las etiquetas deben aplicar a Organizaciones. |
+| Pertenece a | Pertenece a, Matriz, Grupo, Operador, Cadena | NIT o nombre exacto de la matriz: una **ya creada** o **otra fila del mismo archivo** (el navegador ordena las matrices antes que sus sucursales, a cualquier profundidad). No encontrada → error de la fila. |
+| **Contacto: nombres** (obligatorio para **crear**) | Contacto, Nombre contacto, Persona de contacto | La **persona de referencia** (regla: toda organización necesita al menos una). |
+| Contacto: apellidos, cargo, teléfono, correo, documento, WhatsApp | «… contacto» o «contacto …» | Si ya existe una Persona **activa** de la sede con ese **documento**, ese **correo** o ese mismo **nombre + teléfono**, se vincula esa (no se duplica: la misma persona de varias tiendas queda una sola). Si no, se crea y queda en el lote. Queda principal si la organización no tenía personas. |
+| Campos personalizados de Organización | su etiqueta o su clave | Igual que en Personas. |
+
+### Opciones
+
+- **Reconocer existentes por:** *número de documento* (solo dígitos, con y sin DV: `901.142.687-7` = `901142687`), *nombre exacto* (sin tildes ni
+  mayúsculas), *un campo personalizado* de texto o entero del mismo tipo (p. ej. «Código de cliente» del ERP) o *no reconocer* (crear todo). Solo cuentan
+  contactos **activos** del mismo tipo: uno archivado no se reconoce (reimportar después de revertir crea de nuevo). Si coinciden **varios activos**, la
+  fila es error («Más de un contacto activo coincide»): no se adivina.
+- **Si ya existe:** *dejarlo como está* (cuenta como «ya existían») o *completar y actualizar*: cambia **solo lo que el archivo trae con valor**, **agrega**
+  etiquetas y vínculos (no quita nada), puede agregar una persona de referencia nueva a una organización y deja `actualizado` en el historial con los
+  cambios. Si nada cambió, cuenta como «ya existían».
+- **Responsable por defecto** (un usuario de la sede): para los **nuevos** que no traen responsable. No cambia el de los existentes.
+- **Indicativo de WhatsApp** (por defecto 57).
+- **Plantillas** por empresa (tipo `contactos`): guardan el tipo, las columnas (incluidas las de campos personalizados), la fila de encabezado, los
+  formatos y las opciones. Guardar con el mismo nombre la sobrescribe.
+- Avisos en el paso de columnas: organizaciones **sin** la columna «Contacto: nombres» (solo se podrán actualizar existentes: las nuevas quedarían con
+  error) y **campos obligatorios** sin columna (los nuevos fallarían).
+
+### Asistente
+
+1. **Qué y archivo:** Personas u Organizaciones (se puede cambiar en el paso 2), arrastrar o elegir el archivo, formato de ejemplo y ayuda del tipo.
+2. **Columnas y opciones:** tipo, hoja, plantilla, fila de encabezado, formato de fecha, separador decimal; columnas agrupadas en *Datos*, *Persona de
+   referencia* (organizaciones) y *Datos adicionales* (campos personalizados); opciones; **vista previa** de 8 filas ya interpretadas (fechas dd-mm-aaaa,
+   números y sí/no; en rojo lo que no se puede leer); guardar plantilla.
+3. **Revisión:** el navegador arma las filas y marca sus propios errores (sin nombre, fecha/número/sí-no ilegibles, **repetido en el archivo** según cómo
+   se reconocen: «repetido en el archivo (igual a la fila N)»). Después el servidor **simula todo el archivo** por bloques en transacciones que se
+   revierten: nuevos, actualizados, ya existían, personas de referencia nuevas, vínculos nuevos y filas con error con el motivo (correo inválido, falta
+   la persona de referencia, organización no encontrada, campo obligatorio…), más las listas de **organizaciones no encontradas**, **etiquetas** que no
+   existen o no aplican, **cargos** que no existen y **responsables** que no se reconocen. Nada queda guardado.
+4. **Importación:** crea el lote (`iniciar`), manda bloques de 400 filas (el servidor acepta 500; cada bloque en su transacción) con barra de progreso y
+   cierra (`finalizar`, auditado). El resumen trae «**Ver lo importado**», que filtra el listado por ese lote. Si se corta a mitad, lo guardado queda en un
+   lote «En proceso» que se puede revertir.
+
+### Por dentro
+
+- **Navegador** (`services/import/import-contactos.ts`, funciones puras con pruebas): interpreta fechas, números y sí/no; calcula la **clave** con que se
+  reconoce cada fila; marca repetidos; ordena las matrices primero; parte en bloques. Cada fila viaja como `{fila, clave, d: {campo: valor}, campos: {id: valor}}`.
+- **Servidor** (`_lib/_crm_import_contactos.php`): por bloque resuelve los existentes y los catálogos (usuarios, roles, etiquetas, campos) y procesa
+  **fila por fila dentro de un `SAVEPOINT`** con `$GLOBALS['authFailLanza'] = true`. En ese modo `authFail()` **lanza** `AuthFailException` en vez de
+  responder (ver `auth.php`), así cada fila se valida con **exactamente las mismas funciones** del formulario (`crmParsearContacto`, `crmGuardarCampos`,
+  `crmSetTags`, `crmSincronizarVinculos`) y su mensaje queda como motivo de esa fila; `ROLLBACK TO SAVEPOINT` deshace lo que la fila alcanzó a escribir
+  y el bloque sigue. Un error de base de datos (no de validación) sí corta el bloque (500) y no guarda nada de él.
+- **«Pertenece a» en la simulación:** cada bloque simulado se revierte, así que el navegador manda con cada bloque las claves de las matrices de bloques
+  anteriores (`padres`) y el servidor las acepta sin asignarlas. En la importación real las matrices ya están guardadas.
+- Cada contacto creado (y cada persona de referencia nueva) guarda su lote en `crm_contactos.id_importacion`.
+
+### Lotes, reversión e historial
+
+- **Importaciones anteriores:** los lotes de contactos de la sede (quién, cuándo, tipo; nuevos, actualizados, ya existían, personas, vínculos, errores),
+  con «Ver errores», «**Ver sus registros**» (filtra el listado por el lote, en estado *Todos*) y «**Revertir**». Los lotes de ventas se ven aparte (en
+  *Ventas → Importaciones*): `list_importaciones` filtra por `tipo`.
+- **Revertir** (L2+) **archiva** los contactos que el lote creó, incluidas las personas de referencia nuevas: no se borran y se restauran desde
+  *Archivados*. Los que el lote solo **actualizó** quedan como están (sus cambios siguen en el historial). Los vínculos se conservan (como al archivar a
+  mano). Queda `archivado` en el historial de cada uno (con el archivo) y `crm_revertir_importacion` en `le_H_admin`.
+- **Historial del contacto:** «Creado — Por la importación «archivo»», «Actualizado — … Por la importación …» y «Archivado — Al revertir la importación …».
+
+### Modelo (migración `009_crm_importar_contactos.sql`)
+
+- `crm_importaciones.tipo` pasa a `ENUM('ventas','contactos')`, con los contadores `contactos_nuevos`, `contactos_actualizados`, `contactos_omitidos`,
+  `personas_creadas` y `vinculos_creados` y el índice `(id_sede, tipo, created_at)`. `opciones` guarda el tipo importado y el mapeo.
+- `crm_import_plantillas.tipo` pasa a `ENUM('ventas','contactos')` (el nombre es único por empresa y tipo).
+- `crm_contactos.id_importacion`: FK a `crm_importaciones`, `ON DELETE SET NULL`, con índice.
+- Idempotente (`IF NOT EXISTS`); se probó aplicándola dos veces.
+
+### Qué no hace (v1)
+
+- Un tipo por archivo (no hay columna «Tipo» para mezclar Personas y Organizaciones).
+- No crea etiquetas, roles, usuarios ni campos: los que faltan se avisan; se crean en *Configuración* y se vuelve a importar con «actualizar».
+- No importa campos personalizados de la persona de referencia (solo sus datos básicos).
+- Al actualizar no quita etiquetas ni vínculos, y las celdas vacías no borran.
+- Una organización por fila para una Persona (para varias, otra fila con «actualizar» o el formulario).
+- Reconocer por nombre exacto no tolera errores de tipeo.
+- Revertir no deshace actualizaciones.
+
+### Permisos, auditoría y QA
+
+- **L2:** `requireRole('L2')` en `import_contactos.php`, `revertir_importacion.php` y `save_import_plantilla.php`; en pantalla, `canDelete()` (L2) en
+  `contactos.page.ts`.
+- `le_H_admin`: `crm_importar_contactos` al finalizar (archivo y contadores) y `crm_revertir_importacion` (con `tipo` y `contactos_archivados`).
+- **Datos personales:** los motivos de error no copian valores de la fila (nombran la columna); las listas de avisos sí muestran el valor, pero no se
+  guardan en el lote. `qa-sanitize.sql` ya enmascara correos, teléfonos y WhatsApp de todos los contactos, importados o no.
+
+### Pruebas
+
+`import-contactos.spec.ts` (11 pruebas: mapeo automático de personas y organizaciones con campos personalizados, claves de documento y de organización,
+sí/no, armado de filas con fechas, números, sí/no, errores y repetidos, reconocer por nombre y sin reconocer, orden de matrices a cualquier
+profundidad, ciclo, bloques y matrices por bloque). A mano: API con **62 casos** (permisos y opciones inválidas; simulación sin escritura; nuevos,
+omitidos y errores por correo, nombre, organización y ubicación; avisos de etiquetas, cargos y responsables; dos bloques; WhatsApp, fecha, responsable
+por correo, etiquetas y campos de los cinco tipos; lote y filtro por lote; los lotes de ventas no muestran los de contactos; `import_ventas` rechaza un
+lote de contactos; actualizar sin borrar con celdas vacías, etiquetas agregadas, historial; sin cambios = ya existían; reconocer por nombre y ambigüedad;
+campo obligatorio; organizaciones con persona de referencia nueva y reutilizada, «Pertenece a» por NIT sin DV y por nombre en el mismo archivo, matriz
+inexistente, sin persona; matriz de un bloque anterior en la simulación; actualizar una organización agregando una persona sin cambiar la principal;
+revertir, 409 al repetir, revertir un lote que actualizó; reimportar después de revertir; plantillas por tipo; otra empresa). Playwright 1280 y 375 con
+un `.xlsx` real (título antes del encabezado, campos personalizados, sí/no, fecha) y un CSV Windows-1252 con `;` (tildes, persona de referencia,
+«Pertenece a» en el mismo archivo): formato de ejemplo, plantilla, revisión con avisos y errores por fila, importar, «Ver lo importado», historial del
+contacto, importaciones anteriores, revertir, «Ver sus registros», L1 sin botón, móvil sin desborde y sin errores de consola.
 
 ## Ubicación en el mapa
 
@@ -352,7 +530,8 @@ Cuando se gana una oportunidad, su venta se registra **a mano** (nunca sola) reu
 - **Indicadores:** total vendido, número de ventas, clientes con compra, ticket promedio y unidades.
 - **Pestañas:** *Por cliente* (ventas, última compra, total y barra; clic abre el perfil), *Por ítem* (cantidad y total; las líneas sin ítem se agrupan
   por código/descripción; clic filtra las ventas de ese ítem), *Por mes* (barras), *Ventas* (detalle; las manuales llevan la marca «Manual» y, con el
-  filtro de estado, las inactivas «Anulada» o «Revertida»; clic abre la venta con sus líneas, su origen y su historial) e *Importaciones* (lotes con contadores, errores, «Ver sus ventas» y **Revertir**, L2+).
+  filtro de estado, las inactivas «Anulada» o «Revertida»; clic abre la venta con sus líneas, su origen y su historial) e *Importaciones* (lotes **de ventas** con contadores, errores, «Ver sus ventas» y
+  **Revertir**, L2+; los de contactos están en *Contactos → Importar → Importaciones anteriores*).
 - **Revertir un lote:** sus ventas quedan inactivas y el lote pasa a «Revertida» (auditado como `crm_revertir_importacion`). Las ventas que ese lote
   había **reemplazado no se reactivan solas** (pudieron cambiar después): si hace falta, se vuelve a importar el archivo anterior.
 - **Perfil del contacto:** tarjeta «Ventas (últimos 12 meses)» con total, número de ventas, última compra y las 3 más recientes (una organización con
@@ -578,6 +757,7 @@ Desde las fases A–C también traen embudo con etapas, motivos de cierre, un ca
 | Editar o eliminar una nota ajena | L2 (la propia: su autor) |
 | Ver ventas, sus análisis y reportes | Acceso al módulo |
 | Importar ventas, revertir importaciones y guardar plantillas de mapeo | L2 |
+| Importar contactos, ver y revertir sus importaciones, guardar plantillas de contactos | L2 |
 | Registrar ventas a mano (carrito, también desde una oportunidad ganada); anular y restaurar las manuales | L2 |
 | Ver la venta de una oportunidad («Ver venta») | Acceso al módulo |
 | Ver metas (panel, página, perfil) y exportar su informe | Acceso al módulo |
@@ -589,6 +769,9 @@ Desde las fases A–C también traen embudo con etapas, motivos de cierre, un ca
 `list_contactos`, `get_contacto`, `save_contacto`, `bulk_contactos`, `set_contacto_tags`, `save_vinculo`,
 `remove_vinculo`, `list_historial`, `list_campos`, `save_campo`, `list_tags`, `save_tag`, `save_tag_grupo`,
 `list_roles`, `save_rol`, `list_vocabulario`, `save_vocabulario`, `list_plantillas`, `apply_plantilla`, `list_responsables`, `export_contactos` (más `reportes/get_marca.php`, compartido por todos los reportes).
+Importar contactos: `import_contactos` (`accion` simular —con `padres` opcional—, iniciar, bloque o finalizar); `list_contactos` acepta el filtro `importacion`.
+Lotes y plantillas son compartidos con ventas y reciben `tipo` (`ventas` por defecto | `contactos`): `list_importaciones`, `list_import_plantillas`,
+`save_import_plantilla`; `revertir_importacion` actúa según el tipo del lote (ventas → `{ventas_desactivadas}`; contactos → `{contactos_archivados}`).
 Oportunidades: `list_oportunidades` (`vista` lista o tablero, con resumen), `get_oportunidad`, `save_oportunidad`, `move_oportunidad`, `bulk_oportunidades`,
 `list_notas`, `save_nota`, `export_oportunidades`; configuración: `get_config`, `save_config`, `list_embudos`, `save_embudo`, `save_etapa`, `list_motivos`,
 `save_motivo`, `list_categorias_item`, `save_categoria_item`, `list_items`, `save_item`. `list_historial` acepta `tabla` (`crm_contactos` | `crm_oportunidades`).
@@ -599,13 +782,13 @@ activas|inactivas|todas), `get_venta` (con `historial`), `save_venta` (venta man
 `list_import_plantillas`, `save_import_plantilla`, `export_ventas` (`lote` NULL = manual).
 Metas: `list_metricas`, `save_metrica`, `list_metas` (`vista` lista —filtros, corte, orden, conteo por estado—, panel —tres niveles de un día— o
 referencia —real actual, del período anterior y del mismo período del año anterior—), `save_meta`, `generar_metas` (`accion` simular o guardar), `export_metas`.
-Helpers en `backend/_lib/_crm.php` (los de campos y etiquetas sirven a contactos y oportunidades vía `crmEntidad`), `_crm_oportunidades.php`, `_crm_ventas.php`, `_crm_metas.php`, `_historial.php` y `_reportes.php`. Todo con `db_prepare_or_fail`, respuesta
+Helpers en `backend/_lib/_crm.php` (los de campos y etiquetas sirven a contactos y oportunidades vía `crmEntidad`), `_crm_oportunidades.php`, `_crm_ventas.php`, `_crm_import_contactos.php`, `_crm_metas.php`, `_crm_plantillas.php`, `_historial.php` y `_reportes.php`. Todo con `db_prepare_or_fail`, respuesta
 `{action, mensaje, data}` y guardado en transacción. `save_vinculo`/`remove_vinculo` están probados pero la UI v0 edita
 los vínculos desde el formulario de la Organización.
 
 ## Frontend (`/m/crm/…`)
 
-`contactos` (listado + filtros + lote), `contactos/:id` (perfil), `oportunidades` (panel de metas + tablero/lista), `oportunidades/:id` (ficha), `ventas` (análisis, detalle,
+`contactos` (listado + filtros + lote + importar), `contactos/:id` (perfil), `oportunidades` (panel de metas + tablero/lista), `oportunidades/:id` (ficha), `ventas` (análisis, detalle,
 importaciones, asistente de importación y carrito de venta manual), `metas` (mes a mes: panel de tres niveles y tabla de organizaciones), `configuracion` (L4: campos,
 etiquetas, embudo, catálogo, métricas, roles, vocabulario y plantillas; cada pestaña se crea al abrirla). Metas: `app-metas-panel` (compacto o completo),
 diálogos de meta y de generación, `app-meta-bar`, `app-meta-estado` y `app-periodo-picker` (`pages/crm/metas-ui.ts`), funciones de período en `metas-periodo.ts`
@@ -616,17 +799,70 @@ con `true` si cambió),
 selector de etiquetas (multi, agrupado, por destino), historial (contactos y oportunidades). Componentes reutilizables:
 `app-contacto-picker` (buscador con autocompletado de un tipo de contacto), `app-item-picker` (ítems del catálogo), `app-campos-form` (campos personalizados),
 `app-tag-chip`, `app-date-input`, `app-export-menu` (botón Exportar). `CrmConfigService.money()` formatea montos con la moneda de la empresa.
-Lectura de archivos: `services/import/import-parse.ts` (funciones puras con pruebas; ExcelJS solo al abrir un `.xlsx`).
+Lectura de archivos: `services/import/import-parse.ts` (funciones puras con pruebas; ExcelJS solo al abrir un `.xlsx`; `mapeoPorSinonimos` genérico)
+e `import-contactos.ts` (campos, sinónimos, armado de filas, claves, orden de matrices, bloques). Importar contactos: `contactos-import-dialog.component.ts`
+(asistente, `abrirImportarContactos`) y `contactos-importaciones-dialog.component.ts` (lotes, `abrirImportacionesContactos`); ambos se cierran con
+`{lote}` para filtrar el listado por ese lote.
 `DialogService.confirm` gana `confirmWord`.
+
+## Convenciones técnicas del módulo
+
+Lo que un módulo nuevo debería copiar (y lo que no hay que reinventar):
+
+- **Backend, cada endpoint:** `db_connection.php` primero (además de la conexión, fija la **zona horaria de PHP** con la `TZ` del contenedor —la misma
+  de MariaDB— o `America/Bogota`: PHP 8 no lee `TZ` y sin esto «hoy» sería UTC), luego `cors.php`, `auth.php` y la librería del módulo. `crmContext()`
+  da sede, empresa, usuario y rol **de la sesión** (la sede nunca llega por POST) y exige el módulo contratado; `requireRole('L2' | 'L4')` para lo sensible.
+  Respuesta siempre `{action, mensaje, data}` (`crmOk` / `authFail`); errores de BD con `db_*_or_fail` (JSON, nunca HTML).
+- **Escrituras en transacción:** un `authFail` antes del `commit` la deja revertida sola. Las validaciones viven en helpers (`crmParsearContacto`,
+  `crmOpLineasParsear`, `crmVentaManualParsear`, `crmMetaParsear`…) y se reutilizan en todos los caminos (formulario, lote, importación).
+- **Simular antes de guardar:** la misma función con una transacción que se revierte (importar ventas y contactos, generar metas, «Revisar venta»).
+- **Importaciones fila por fila:** `$GLOBALS['authFailLanza'] = true` + `SAVEPOINT` por fila + `catch (AuthFailException)` (ver *Importar contactos*).
+- **Lotes revertibles:** `crm_importaciones` con `tipo`; cada registro guarda su `id_importacion`; revertir es lógico.
+- **Historial:** `auditRegistro($conn, $sede, 'crm', tabla, id, accion, detalle)` en `le_H_registros`; acciones en uso: `creado`, `actualizado`,
+  `archivado`, `restaurado`, `tags_agregados`/`_quitados`, `vinculo_*`, `etapa_cambiada`, `nota_*`, `anulado`, `reemplazado`, `venta_*`. Lo sensible
+  de plataforma va con `auditAdmin()` a `le_H_admin` (exportar, importar, revertir, aplicar plantilla).
+- **Eliminación lógica** (`activo = 0`) y restaurable, nunca `DELETE` de registros de negocio.
+- **Comparar textos del usuario:** `crmVentaClavesDoc` (documento: solo dígitos, con y sin DV) y `crmVentaClaveTexto` (sin tildes ni mayúsculas); en el
+  navegador, `claveDocumento` y `claveTexto` hacen lo mismo para que ambos lados coincidan.
+- **Frontend:** componentes standalone con signals y `OnPush`; cargas con `LoadingService.wrap` (en un `effect`, dentro de `untracked`); diálogos con
+  `DialogService` y `dialogSize()`; montos con `parseNumero` (formato del idioma) y `CrmConfigService.money()`; textos con `'clave' | translate` y el
+  vocabulario de la empresa sin género; toda lista con `app-export-menu`; ids estables en botones y campos para las pruebas (`btn-…`, `cimp-…`).
 
 ## Cómo probarlo en local
 
-Migraciones 001–008 + `database/dev-seed-crm.sql` (solo desarrollo, **no** se despliega: usuarios con token conocido,
+Migraciones 001–009 + `database/dev-seed-crm.sql` (solo desarrollo, **no** se despliega: usuarios con token conocido,
 61 personas y 20 organizaciones ficticias, con jerarquía y roles, config de los tres pilotos; el embudo y el catálogo se crean aplicando una plantilla
 desde *Ajustes → Plantillas*). Login de prueba en dev:
 `window.__leDev.login('dev-token-l4')` (l5, l4, l2, l1, nocrm, otro). Ver «Desarrollo local» en `pendientes.md`.
 
-## Límites con otros módulos (propuesta)
+**Baterías de prueba** (corridas contra el backend local con la base recién cargada; al 2026-09-25 todas pasan): API —contactos y oportunidades 106
+casos, importar contactos 62, ventas importadas 51, venta manual 57, venta desde oportunidad 41, metas 82 (399 en total)— y Playwright de cada fase
+(1280 y 375 px, sin errores de consola). Pruebas unitarias: `npx ng test` (50). **Las baterías de API y Playwright viven en el scratchpad de cada
+sesión, no en el repo** (ver *Pendientes*: versionarlas).
+
+## Puesta en marcha de un cliente (checklist)
+
+1. **Plataforma (L5):** crear la empresa y sus sedes (*Empresas*), contratar el módulo CRM en cada sede (vigencia por fechas) y dar acceso a los
+   usuarios: L4 para quien administra la empresa, L2 para supervisores (archivan, ven historial, importan y registran ventas), L0–L1 con el privilegio
+   `crm` para vendedores.
+2. **Plantilla del nicho (L4, *Configuración → Plantillas*):** trae vocabulario, roles de vínculo, campos personalizados, etiquetas, embudo con etapas,
+   motivos de cierre, catálogo de ejemplo y métricas. Solo agrega: se puede aplicar después de configurar.
+3. **Ajustar la configuración (L4):** vocabulario (cómo llama la empresa a Persona, Organización, Contacto, Oportunidad e Ítem), moneda y decimales,
+   campos (cuáles son obligatorios), etiquetas, roles, embudo, etapas y motivos, y el **catálogo con los mismos códigos del ERP** (así la importación de
+   ventas reconoce los ítems).
+4. **Importar contactos (L2, *Contactos → Importar*):** primero las **Organizaciones** con su persona de referencia y «Pertenece a» (matrices y
+   sucursales pueden ir en el mismo archivo), después las **Personas** sueltas (clientes finales, o personas de organizaciones con la columna
+   «Organización»). Guardar la plantilla de columnas. Revisar los avisos: crear en *Configuración* las etiquetas o cargos que falten y reimportar con
+   «Completar y actualizar».
+5. **Importar ventas históricas (L2, *Ventas → Importar*):** idealmente 12 meses o más (dan la referencia para las metas), con una plantilla que se
+   reutiliza cada mes; reconocer clientes por NIT o por el código de cliente del ERP (un campo personalizado).
+6. **Metas (L4):** métricas; metas de empresa y sede; **Generar por organización** con el histórico + crecimiento.
+7. **Operación diaria:** oportunidades en el tablero; ventas en el carrito o desde la oportunidad ganada; carga mensual del ERP con «reemplazar»;
+   panel de metas en Oportunidades; exportes PDF/Excel.
+
+## Integración con otros módulos (para planear el siguiente)
+
+**Límites propuestos** (el CRM no hace estas cosas; las hacen otros módulos y el CRM las muestra o las usa):
 
 | Función | Dueño | El CRM… |
 |---|---|---|
@@ -635,6 +871,31 @@ desde *Ajustes → Plantillas*). Login de prueba en dev:
 | Visitas técnicas, tickets de postventa | Servicios | Muestra el historial en la ficha |
 | WhatsApp, correo, formularios web, webhooks | Integraciones | Recibe leads y registra conversaciones |
 | Tableros entre sedes | Gerencia | Expone sus indicadores |
+| Facturación electrónica | (Facturación, por definir) | Recibe las ventas en `crm_ventas` para indicadores y metas |
+
+**Lo que el CRM ya ofrece a un módulo nuevo:**
+
+- **Libreta única de contactos** de la sede (`crm_contactos.id`): toda cita, pedido, servicio o conversación debe apuntar a un contacto (principio 4), no
+  crear su propia libreta. Buscador reutilizable `app-contacto-picker`; el perfil del contacto se amplía con tarjetas (patrón de «Ventas» y «Metas»:
+  «Próximas citas», «Pedidos»…).
+- **Historial genérico** (`le_H_registros` + `auditRegistro()`); el diálogo de historial acepta hoy `crm_contactos` y `crm_oportunidades`
+  (`list_historial.php`): una tabla nueva se agrega a esa lista.
+- **Reportes con marca** (`ReportService`, `ReportSpec`, `app-export-menu`) y auditoría de exportación.
+- **Catálogo de ítems** por empresa (`crm_catalogo_items`, con categorías y precio de referencia): lo pueden usar Pedidos y Servicios.
+- **Ventas** (`crm_ventas` + líneas): Pedidos o Facturación pueden escribir ahí y las metas las cuentan sin cambios. Hoy `id_importacion` NULL =
+  registrada a mano: si llega Facturación conviene su propio vínculo (p. ej. `id_factura`) o una columna `origen` para distinguirla de la manual.
+- **Metas:** las fuentes son fijas en código (`CRM_META_FUENTES` y `crmMetaConsulta` en `_crm_metas.php`); medir algo de otro módulo (p. ej. «citas
+  atendidas» de Agenda) es agregar una fuente ahí.
+- **Importador** en el navegador (`import-parse.ts`) y el patrón simular → lote → bloques con `SAVEPOINT` por fila, para importar citas, productos, etc.
+- **Vocabulario y plantillas por nicho:** se extienden con las claves y los datos de ejemplo del módulo nuevo.
+
+**Preguntas para planear el siguiente módulo:**
+
+1. ¿Qué sigue: **Actividades y cotizaciones** dentro del CRM, o **Agenda** como módulo aparte (citas de la clínica, visitas técnicas a plantas)?
+   Propuesta: tareas, llamadas y seguimientos en el CRM (atados a contacto u oportunidad); citas con hora, recurso y sede en Agenda.
+2. ¿La **cotización** es un documento PDF numerado que sale de las líneas de la oportunidad (ya existen) y al aceptarse la gana?
+3. ¿Recordatorios y avisos (vencimiento de una tarea, meta atrasada) por notificación push (FCM ya funciona) o por correo (Integraciones)?
+4. ¿Qué nicho piloto guía el siguiente módulo (pinturas B2B, plantas de agua o clínica)?
 
 ## Hoja de ruta (plan aprobado 2026-09-25)
 
@@ -647,14 +908,20 @@ Cada fase se prueba, se despliega y se usa sola. Todo es configurable por empres
 | **B** ✅ | **Ventas importadas** por Excel/CSV: `crm_ventas` + líneas + lotes revertibles + plantillas de mapeo de columnas; la organización se identifica por NIT o código de cliente; pestaña «Ventas» en el perfil de la organización. El navegador lee el archivo y envía bloques al servidor. Migración `006`. |
 | **B.1** ✅ | **Venta manual (carrito)**: registrar una venta sin archivo desde *Ventas* o el perfil del contacto, con catálogo, líneas libres, revisión en el servidor sin guardar y confirmación; anular con motivo y restaurar; filtros de origen y estado; historial por venta. Sin migración (`id_importacion` NULL). Ver *Ventas → Venta manual*. |
 | **B.2** ✅ | **Venta desde una oportunidad ganada**: botón de carrito en la tarjeta, la fila y la ficha (L2+) que abre el mismo carrito con cliente fijo, líneas y fecha de hoy; una sola venta activa por oportunidad; historial en la oportunidad; el vínculo pasa a la venta importada que la reemplace. Migración `008`. Ver *Ventas → Venta desde una oportunidad ganada*. |
+| **D** ✅ | **Importar contactos** desde Excel/CSV: Personas u Organizaciones (con persona de referencia y «Pertenece a» en el mismo archivo), reconocer existentes por documento, nombre o campo, dejar o completar y actualizar, campos personalizados, etiquetas, cargos y responsable; revisión completa sin guardar; lotes revertibles (archivan lo creado) e importaciones anteriores; plantillas. Validación fila por fila con las reglas del formulario (`SAVEPOINT` + `authFail` que lanza). Migración `009`. Ver *Importar contactos*. |
 | **C** ✅ | **Metas paramétricas** (empresa → sede → organización): métricas configurables (ventas en monto o cantidad, filtro por ítem o categoría, oportunidades ganadas, clientes con compra), períodos, avance y «esperado a la fecha»; panel superior en Oportunidades, página de metas, generación en lote e informe. La meta de la empresa suma las sedes de la empresa y muestra **solo el agregado** a todo el CRM (excepción documentada al aislamiento por sede). Migración `007` (ver *Metas*). |
 
 Las ventas y las metas viven dentro del CRM; sus tablas se piensan para que un futuro módulo de Ventas/Facturación escriba en las mismas.
+**Estado:** todas las fases del plan (0, A, B, B.1, B.2, C, D) están en producción desde el 2026-09-25.
 
 ## Decisiones
 
 | Fecha | Decisión |
 |---|---|
+| 2026-09-25 | Importar contactos: **un tipo por archivo**; una organización nueva exige su persona de referencia en la misma fila (se reutiliza si ya existe por documento, correo o nombre + teléfono); «Pertenece a» puede apuntar a otra fila del archivo; L2, como importar ventas |
+| 2026-09-25 | Importar contactos: validar **cada fila con las funciones del formulario** (`authFail` lanza `AuthFailException` en modo importación + `SAVEPOINT` por fila), no con reglas paralelas; solo se reconocen contactos **activos**; ambigüedad = error |
+| 2026-09-25 | «Completar y actualizar» solo cambia lo que el archivo trae con valor y **agrega** etiquetas y vínculos; revertir un lote **archiva** lo que creó y no deshace actualizaciones; etiquetas, cargos y responsables desconocidos se avisan y se ignoran |
+| 2026-09-25 | Zona horaria: PHP toma la `TZ` del contenedor (la de MariaDB) en `db_connection.php`; sin eso usaba UTC y de 7 p. m. a medianoche «hoy» era mañana (fechas futuras aceptadas, corte de metas adelantado) |
 | 2026-09-25 | Venta desde una oportunidad ganada: **acción manual** (botón de carrito), mismo carrito con todo cargado; **una sola venta activa por oportunidad**; fecha por defecto **hoy**; **L2+**; cliente fijo; vínculo `crm_ventas.id_oportunidad` (migración `008`) que pasa a la importada que la reemplace (mismo cliente) |
 | 2026-09-25 | Venta manual en las **mismas tablas** que la importada (`id_importacion` NULL), sin migración; registrar, anular y restaurar = **L2**, como importar (las ventas alimentan las metas) |
 | 2026-09-25 | Venta manual **sin edición**: se anula con motivo obligatorio y se registra de nuevo (queda rastro); solo las manuales se anulan una por una, las importadas se revierten por lote |
@@ -705,7 +972,14 @@ aviso, no bloqueo; búsqueda v0 no tolera errores de tipeo; tope de 5.000 por lo
 2. **Orden por columna** en el listado (el backend ya lo soporta: `orden`, `dir`).
 3. **Datos personales**: autorización de tratamiento por contacto; en la clínica, la historia clínica queda fuera del CRM.
 4. **Purga del historial** (política de retención a largo plazo, si se necesita).
-5. ~~Exportar contactos (Excel/PDF)~~ ✅ 2026-09-25. Falta **importar** contactos desde Excel/CSV (se puede reutilizar `import-parse.ts` y el patrón simular/lotes de ventas).
+5. ~~Exportar contactos (Excel/PDF)~~ ✅ 2026-09-25. ~~Importar contactos~~ ✅ 2026-09-25 (fase D). Mejoras posibles: mezclar tipos en un archivo
+   (columna «Tipo»); campos personalizados de la persona de referencia; varias organizaciones por Persona en una fila; crear etiquetas y cargos
+   desde la revisión; deshacer también las actualizaciones al revertir (guardando el «antes»).
 6. Etiquetas con `aplica_a` restringido que ya están asignadas al tipo contrario: hoy se conservan.
 7. Plantillas y nombres por defecto solo en español/inglés; los textos de las plantillas (campos, etiquetas) son en español.
 8. Jerarquía: hoy el filtro «Pertenece a» trae solo los dependientes directos (no todo el árbol).
+9. **Versionar las pruebas:** las baterías de API (399 casos) y Playwright viven en el scratchpad de las sesiones. Conviene llevarlas a `tests/` en el
+   repo y correr las de API en el CI con una MariaDB de servicio (hoy el CI solo hace `php -l`, `ng lint` y el build).
+10. **Datos de demo en PDN** (empresa «Pintuco - Demo»): el usuario del dueño en esa sede es L0, así que no ve los botones de L2 (importar, registrar
+    ventas); las 15 oportunidades ganadas del demo tienen su factura importada pero **sin vínculo** (`id_oportunidad`), así que muestran el carrito.
+    Vincularlas es un `UPDATE` en PDN que requiere autorización del dueño.
