@@ -2,6 +2,11 @@
 // Conexión a la BD. Sin secretos: todo llega por variables de entorno del compose.
 // Este archivo SE VERSIONA y se despliega con el CI (no hay archivos gitignored con código).
 
+// «Hoy» de PHP = el del negocio (el mismo de MariaDB, que corre con TZ = APP_TZ). PHP 8 NO lee la variable TZ del contenedor: sin esto usa
+// UTC y, de 7 p. m. a medianoche en Colombia, ya cree que es mañana (fechas «futuras» aceptadas, corte de las metas un día adelante).
+// Todo endpoint carga este archivo primero, así que la zona queda puesta antes de cualquier date().
+if (!@date_default_timezone_set(getenv('TZ') ?: 'America/Bogota')) date_default_timezone_set('America/Bogota');
+
 function conectar(): mysqli
 {
     // PHP 8.1+ lanza excepciones por defecto; el código de la app chequea retornos.
