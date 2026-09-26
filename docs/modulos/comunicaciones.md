@@ -141,6 +141,9 @@ clics).
 encabezado, programación, total, créditos estimados, motivo de pausa, `reintentar_desde`), `com_campana_destinatarios` (contacto, `wa_id`,
 estado, mensaje, error, intentos, `link_token`, respondió, clic; **único campaña + número**) y `com_bajas`.
 
+**`015_comunicaciones_webhook_linea.sql`**: `com_lineas.webhook_numero` (URL alterna del número según Meta), `webhook_efectivo` (a dónde llegan
+hoy sus mensajes) y `webhook_revisado_at` (ver *Convivencia con LegacyChats*).
+
 Todas idempotentes (probadas aplicándolas dos veces) y compatibles con Linux (nombres `le_H_…` con su mayúscula).
 
 ## WhatsApp
@@ -417,7 +420,8 @@ Todo se valida en el backend (`comContext()` = `requireModulo('comunicaciones')`
 | `webhook.php?app=<id>` | público firmado | Verificación y eventos de Meta |
 | `r.php?t=<token>` | público | Cuenta el clic y redirige al destino guardado |
 | `list_apps`, `save_app` | L5 | Apps de Meta (secretos cifrados; nunca se devuelven; URL del webhook) |
-| `list_lineas`, `save_linea`, `probar_linea` | L5 | Líneas; probar conexión (Graph: nombre verificado, calidad, nivel) + suscribir la WABA |
+| `list_lineas`, `save_linea`, `probar_linea` | L5 | Líneas; probar conexión (Graph: nombre verificado, calidad, nivel) + suscribir la WABA + a dónde llegan sus mensajes (informativo) |
+| `webhook_linea` | L5 | `accion` ver / activar / quitar: webhook alterno del número en Meta (recibir aquí sus mensajes aunque la app apunte a otro sistema) |
 | `list_billeteras`, `recargar`, `list_tarifas`, `save_tarifa` | L5 | Bolsas de todas las empresas/sedes, recargas y ajustes, tarifas |
 | `list_lineas_sede` | módulo | Líneas activas de la sede (sin datos sensibles) |
 | `get_config`, `save_config` | L4 | Ajustes (lo que no viene en el POST se conserva) |
@@ -467,12 +471,16 @@ cola), `_com_bandeja.php` (permisos y formato), `_com_bot.php` (validación, dis
 
 1. **L5 → Sedes:** contratar el módulo `comunicaciones` en la sede y dar el privilegio `comunicaciones` a los usuarios L0–L3 que lo usarán.
 2. **Créditos:** `/admin/comunicaciones` → Créditos → Recargar la bolsa de la sede o de la empresa (y en Ajustes de la sede, elegir la fuente).
-3. **App de Meta** (una vez por app; se reutiliza para varios clientes si somos *Tech Provider*): Apps de Meta → Nueva app con `app_id`, *app
-   secret* (App Dashboard → Configuración → Básica) y un *verify token* («Generar»). Copiar la **URL del webhook** que muestra la tarjeta
-   (`https://api.legacyenterprise.legacysoftware.cloud/comunicaciones/webhook.php?app=<id>`) en App Dashboard → WhatsApp → Configuración →
-   Webhook con el mismo *verify token*, y suscribir los campos `messages`, `message_template_status_update`, `template_category_update`,
-   `message_template_quality_update`, `phone_number_quality_update` y `account_update`.
-4. **Token permanente:** Business Settings → Usuarios del sistema → usuario Administrador con acceso a la app y a la WABA → «Generar token» con
+3. **App de Meta: se reutiliza la que ya está publicada y revisada** (la app «LegacyChats»; **no se crea una app nueva en Meta**). En
+   Apps de Meta → «Nueva app» solo se **registra** en LegacyEnterprise: `app_id`, *app secret* (App Dashboard → Configuración → Básica → Clave
+   secreta; LegacyChats nunca lo guardó porque no validaba la firma) y un *verify token* («Generar»). La tarjeta muestra la **URL del webhook**
+   (`https://api.legacyenterprise.legacysoftware.cloud/comunicaciones/webhook.php?app=<id>`). Una app de Meta tiene **una sola URL de webhook**:
+   mientras LegacyChats siga vivo se deja la suya y cada número que pasa a LegacyEnterprise se redirige con un *override* (ver *Convivencia con
+   LegacyChats*); al apagarlo se cambia la URL de la app (App Dashboard → WhatsApp → Configuración → Webhook, con el mismo *verify token*) y se
+   suscriben `messages`, `message_template_status_update`, `template_category_update`, `message_template_quality_update`,
+   `phone_number_quality_update` y `account_update`.
+4. **Token permanente:** el del usuario del sistema que ya usa LegacyChats sirve (es del usuario del sistema, no de la plataforma). Si hay que
+   generar uno: Business Settings → Usuarios del sistema → usuario Administrador con acceso a la app y a la WABA → «Generar token» con
    `whatsapp_business_messaging` y `whatsapp_business_management`, vencimiento «Nunca».
 5. **Línea:** Líneas → Nueva línea (sede, app, nombre, teléfono visible, `phone_number_id`, `waba_id`, token). Al guardarla se **prueba la conexión
    sola**: lee el número en Graph (nombre verificado, calidad, nivel) y **suscribe la WABA a la app** (`POST /{waba_id}/subscribed_apps`), el
@@ -482,10 +490,45 @@ cola), `_com_bandeja.php` (permisos y formato), `_com_bot.php` (validación, dis
 8. **Plantillas** (L2): crear las de la operación (o sincronizar las que ya existan en Meta); la aprobación tarda de minutos a un día.
 9. **Prueba real:** escribir «hola» al número desde un celular → el chatbot responde; «asesor» → aparece en la cola; responder desde la bandeja.
 
+### Convivencia con LegacyChats (hasta confirmar que LegacyEnterprise envía y recibe)
+
+**LegacyChats no se apaga** hasta que el dueño compruebe desde LegacyEnterprise que un mensaje sale y llega. Para probar con la misma app sin
+tocar la URL de webhook de la app (que sigue siendo la de LegacyChats), Meta permite un **webhook alterno por número** ([Webhook overrides](https://developers.facebook.com/documentation/business-messaging/whatsapp/webhooks/override/)):
+prioridad número → WABA → app. Solo afecta a ese número; las demás líneas de LegacyChats siguen igual.
+
+**En la pantalla** (`/admin/comunicaciones` → Líneas, L5; migración `015`, `webhook_linea.php`): cada línea muestra a dónde manda Meta hoy sus
+mensajes («Mensajes: llegan aquí» / «van a otra URL: …» / «sin revisar»; lo lee «Probar conexión» o el botón de sincronizar) y ofrece
+**«Recibir aquí los mensajes de este número»** (con confirmación) o **«Devolver a la URL de la app»**. Activar exige que la app tenga *App
+Secret* (sin él la firma fallaría y se perderían mensajes) y manda a Meta nuestra URL con el *verify token* de la app (Meta la verifica con un
+GET antes de aceptarla). Cada cambio queda en `le_H_admin` (`com_webhook_linea`). En QA el saneo borra lo leído de PDN.
+
+Lo mismo a mano, por si hiciera falta:
+
+```bash
+# Redirigir UN número a LegacyEnterprise (Meta hace la verificación GET con ese verify token: el de la app registrada en LegacyEnterprise)
+curl -s -X POST "https://graph.facebook.com/v23.0/<PHONE_NUMBER_ID>" -H "Authorization: Bearer <TOKEN>" -H "Content-Type: application/json" \
+  -d '{"webhook_configuration":{"override_callback_uri":"https://api.legacyenterprise.legacysoftware.cloud/comunicaciones/webhook.php?app=<id>","verify_token":"<VERIFY_TOKEN_EN_LE>"}}'
+# Ver a dónde llega cada nivel
+curl -s "https://graph.facebook.com/v23.0/<PHONE_NUMBER_ID>?fields=webhook_configuration" -H "Authorization: Bearer <TOKEN>"
+# Devolverlo a LegacyChats
+curl -s -X POST "https://graph.facebook.com/v23.0/<PHONE_NUMBER_ID>" -H "Authorization: Bearer <TOKEN>" -H "Content-Type: application/json" \
+  -d '{"webhook_configuration":{"override_callback_uri":""}}'
+```
+
+- El *override* cubre `messages` (mensajes y estados de entrega, que es lo que cobra créditos). Los eventos de **plantillas y de la cuenta**
+  (aprobación, reclasificación, calidad) **siempre van a la URL de la app** (LegacyChats) mientras no se cambie: en LegacyEnterprise se ven con
+  **Plantillas → Sincronizar**.
+- Enviar una plantilla no necesita webhook, pero sin el *override* el mensaje queda «pendiente» en LegacyEnterprise (el «enviado/entregado» le
+  llega a LegacyChats) y no se cobra.
+- La firma de los eventos es con el *app secret* de la app: por eso hay que registrarlo en LegacyEnterprise.
+- Guardar la línea en LegacyEnterprise hace `POST /{waba_id}/subscribed_apps` sin cuerpo: la app ya estaba suscrita (no cambia nada para
+  LegacyChats), pero ese llamado **borra un override a nivel de WABA** si existiera; por eso el override va por número.
+- Una misma línea en QA y en PDN: el override apunta a un solo entorno a la vez.
+
 ## Operación
 
-- **Llave `COM_SECRET_KEY`** (acción del dueño, una vez por entorno; sin ella no se pueden guardar apps ni líneas). En la VPS, sin pasar la llave
-  por el chat:
+- **Llave `COM_SECRET_KEY`** (una vez por entorno; sin ella no se pueden guardar apps ni líneas; **puesta en QA y PDN el 2026-09-26**). Cómo se
+  generó en la VPS, sin pasar la llave por el chat:
   ```bash
   cd /opt/legacyenterprise/production        # y luego /opt/legacyenterprise/qa
   sed -i '/^COM_SECRET_KEY=$/d' .env         # quita una línea vacía si bootstrap-env.sh la agregó
@@ -497,11 +540,14 @@ cola), `_com_bandeja.php` (permisos y formato), `_com_bot.php` (validación, dis
   ```
   **No cambiarla:** lo cifrado con la anterior deja de poder leerse (habría que volver a cargar los secretos). QA tiene su propia llave (lo que
   llega de PDN en la copia queda sin secretos por el saneo).
-- **Cron del worker** (acción del dueño; crontab de `dev01`, uno por entorno):
+- **Cron del worker** (crontab de `dev01`, uno por entorno; **instalado el 2026-09-26**). Corre como `www-data` dentro del contenedor: `logs/` es
+  de `www-data` y `dev01` no puede escribir ahí (con la redirección en el host, `sh` no lanzaría el comando); así el webhook también puede
+  escribir en el mismo log:
   ```
-  * * * * * timeout 55 docker exec legacyenterprise_php_prod php /var/www/html/cron/jobs/com_worker.php >> /opt/legacyenterprise/production/logs/com_worker.log 2>&1
-  * * * * * timeout 55 docker exec legacyenterprise_php_qa php /var/www/html/cron/jobs/com_worker.php >> /opt/legacyenterprise/qa/logs/com_worker.log 2>&1
+  * * * * * timeout 58 docker exec -u www-data legacyenterprise_php_prod sh -c 'php /var/www/html/cron/jobs/com_worker.php >> /var/log/app/com_worker.log 2>&1'
+  * * * * * timeout 58 docker exec -u www-data legacyenterprise_php_qa sh -c 'php /var/www/html/cron/jobs/com_worker.php >> /var/log/app/com_worker.log 2>&1'
   ```
+  ¿Corrió? `cat /opt/legacyenterprise/<env>/logs/last_run_com_worker.json` (inicio, fin, entrantes, campañas).
   Sin cron el módulo funciona por el disparo del webhook y del lanzamiento, pero las campañas programadas, los reintentos y la espera por saldo o
   cupo esperan al siguiente evento. En QA el cron no escribe a clientes: las líneas copiadas de PDN quedan inactivas.
 - **QA** se reinicia con una copia saneada de PDN en cada push a `qa`: para probar WhatsApp allí se registra una app/línea de prueba (número de

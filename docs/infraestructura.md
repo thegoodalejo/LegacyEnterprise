@@ -79,8 +79,8 @@ Plataforma (L5 = dueño/soporte, is_platform_admin)
 | Buckets R2 | `legacyenterprise-qa`, `legacyenterprise-qa-private` | `legacyenterprise-prod`, `legacyenterprise-prod-private` |
 | NPM (proxy host / certificado) | 6 / 6 (Let's Encrypt, vence 2026-12-23, renovación automática) | 7 / 7 (ídem) |
 | Backup diario | 02:30 UTC (`/opt/vps-tools/backup.sh`, crontab de `dev01`) | 02:30 UTC |
-| Worker de Comunicaciones | cada minuto, crontab de `dev01` (`docker exec … com_worker.php`, log en `logs/com_worker.log`) — pendiente del dueño | ídem |
-| Llave de secretos de Meta | `COM_SECRET_KEY` en `.env` + compose (propia de QA) — pendiente del dueño | `COM_SECRET_KEY` (propia de PDN) — pendiente del dueño |
+| Worker de Comunicaciones | cada minuto, crontab de `dev01` (`docker exec -u www-data … com_worker.php`, log en `logs/com_worker.log`, último run en `logs/last_run_com_worker.json`) | ídem |
+| Llave de secretos de Meta | `COM_SECRET_KEY` en `.env` + compose (propia de QA, 2026-09-26) | `COM_SECRET_KEY` (propia de PDN, 2026-09-26) |
 | Webhook de WhatsApp | `https://qa.legacyenterprise.legacysoftware.cloud/comunicaciones/webhook.php?app=<id>` | `https://api.legacyenterprise.legacysoftware.cloud/comunicaciones/webhook.php?app=<id>` |
 
 Nombres generados por `new-app.sh` (ver `references/vps-multiapp.md` de la skill): no cambiarlos.

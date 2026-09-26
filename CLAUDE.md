@@ -38,11 +38,12 @@ El trabajo ya es de producto (módulos: CRM, Agenda, …). **CRM: todo lo planea
 Todo el detalle —mapa del módulo, reglas, API, convenciones técnicas, puesta en marcha de un cliente, integración con otros módulos (para planear el
 siguiente), decisiones y backlog— en [docs/modulos/crm.md](docs/modulos/crm.md).
 
-**Comunicaciones (WhatsApp, reemplaza a LegacyChats): fases E0–E5 construidas y desplegadas (2026-09-26; migraciones 010–014):** bandeja de asesores,
+**Comunicaciones (WhatsApp, reemplaza a LegacyChats): fases E0–E5 construidas y desplegadas (2026-09-26; migraciones 010–015):** bandeja de asesores,
 chatbot por palabras de activación (varios flujos, ir a otro flujo, acciones de otros módulos, editor visual y simulador), plantillas de Meta con
 revisión de categoría, campañas con reporte, créditos por bolsa de empresa o sede cobrados con el `pricing` real de Meta. **Contactos, etiquetas,
-campos y notas compartidos con el CRM** (se vende solo). Falta la llave `COM_SECRET_KEY` y el cron del worker en la VPS (dueño) y E6 (archivar
-LegacyChats, con su confirmación). Detalle: [docs/modulos/comunicaciones.md](docs/modulos/comunicaciones.md).
+campos y notas compartidos con el CRM** (se vende solo). Llave `COM_SECRET_KEY` y cron del worker ya en la VPS (2026-09-26). Primera prueba real
+con la app de Meta de LegacyChats y la línea de Pintuco (override por número); **LegacyChats no se apaga hasta que el dueño envíe un mensaje
+desde LegacyEnterprise** (E6). Detalle: [docs/modulos/comunicaciones.md](docs/modulos/comunicaciones.md).
 
 ## Gitflow
 

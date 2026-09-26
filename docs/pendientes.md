@@ -31,31 +31,24 @@ Código en GitHub (`dev`, `qa`, `pdn`; repo **público**: no subir secretos ni d
 
 ## Comunicaciones (WhatsApp): lo que queda del dueño
 
-El módulo está desplegado en QA y PDN (migraciones 010–014). Sin estos pasos todo funciona **menos** guardar apps de Meta y líneas (la
-pantalla de plataforma muestra el aviso «Falta COM_SECRET_KEY») y, por tanto, recibir y enviar WhatsApp. Detalle: [modulos/comunicaciones.md](modulos/comunicaciones.md) → *Operación*.
+El módulo está desplegado en QA y PDN (migraciones 010–015).
 
-1. **Llave `COM_SECRET_KEY`** (una por entorno; se genera en la VPS, nunca pasa por el chat). El `docker-compose.yml` del repo ya la trae; en la
-   VPS hay que agregar la línea `COM_SECRET_KEY: ${COM_SECRET_KEY}` al `environment:` del servicio `php` (o copiar el compose con `scp`):
-   ```bash
-   for E in production qa; do ssh legacy-vps "cd /opt/legacyenterprise/$E && sed -i '/^COM_SECRET_KEY=\$/d' .env \
-     && { grep -q '^COM_SECRET_KEY=' .env || echo \"COM_SECRET_KEY=\$(openssl rand -base64 32)\" >> .env; }"; done
-   scp infra/production/docker-compose.yml legacy-vps:/opt/legacyenterprise/production/docker-compose.yml
-   scp infra/qa/docker-compose.yml legacy-vps:/opt/legacyenterprise/qa/docker-compose.yml
-   ssh legacy-vps 'cd /opt/legacyenterprise/production && docker compose up -d && cd ../qa && docker compose up -d'
-   ssh legacy-vps "docker exec legacyenterprise_php_prod php -r 'echo strlen(base64_decode(getenv(\"COM_SECRET_KEY\"))), PHP_EOL;'"   # 32
+1. ~~**Llave `COM_SECRET_KEY`**~~ ✅ 2026-09-26 (hecho por el agente con autorización del dueño): generada en la VPS, propia de QA y de PDN (no
+   pasó por el chat), compose del repo copiado (respaldos `docker-compose.yml.bak-20260926` y `.env.bak-20260926` en cada carpeta),
+   `docker compose up -d` y verificada (32 bytes, API 200). **No cambiarla** (lo cifrado con ella dejaría de leerse).
+2. ~~**Cron del worker**~~ ✅ 2026-09-26: en el crontab de `dev01` (respaldo `/tmp/crontab.bak-20260926`), corriendo cada minuto en QA y PDN
+   (`logs/last_run_com_worker.json`). Va como `www-data` dentro del contenedor porque `dev01` no puede escribir en `logs/` (es de `www-data`):
    ```
-   **No cambiarla después** (lo cifrado con ella dejaría de leerse). O pídemelo y lo corro yo.
-2. **Cron del worker** (crontab de `dev01`, `crontab -e`):
+   * * * * * timeout 58 docker exec -u www-data legacyenterprise_php_prod sh -c 'php /var/www/html/cron/jobs/com_worker.php >> /var/log/app/com_worker.log 2>&1'
+   * * * * * timeout 58 docker exec -u www-data legacyenterprise_php_qa sh -c 'php /var/www/html/cron/jobs/com_worker.php >> /var/log/app/com_worker.log 2>&1'
    ```
-   * * * * * timeout 55 docker exec legacyenterprise_php_prod php /var/www/html/cron/jobs/com_worker.php >> /opt/legacyenterprise/production/logs/com_worker.log 2>&1
-   * * * * * timeout 55 docker exec legacyenterprise_php_qa php /var/www/html/cron/jobs/com_worker.php >> /opt/legacyenterprise/qa/logs/com_worker.log 2>&1
-   ```
-   Sin cron funciona con el disparo del webhook, pero las campañas programadas, los reintentos y la espera por saldo o cupo esperan al siguiente evento.
-3. **Primer cliente** (L5 en la app): contratar `comunicaciones` en la sede, recargar créditos, registrar la app de Meta (copiar su URL de webhook
-   en Meta con el *verify token*), crear un usuario del sistema con token permanente y registrar la línea (se prueba y suscribe la WABA sola).
-   Pasos exactos: `comunicaciones.md` → *Puesta en marcha de un cliente*. Para probar en QA: un número de prueba de Meta (se pierde en el siguiente push a `qa`).
-4. **LegacyChats (E6):** confirmar para apagar su infraestructura y archivar el repositorio `F:\Proyectos\LegacyChats` (no tiene clientes ni datos
-   que migrar). No se ha tocado nada de LegacyChats.
+3. **Primera prueba real, reutilizando la app de Meta de LegacyChats** (publicada y revisada; no se crea otra): registrarla en
+   `/admin/comunicaciones` con su *app secret* (App Dashboard → Configuración → Básica), registrar la línea con el token del usuario del sistema
+   y **redirigir solo ese número** a LegacyEnterprise con el botón «Recibir aquí los mensajes de este número» de la línea (webhook alterno por
+   número; `comunicaciones.md` → *Convivencia con LegacyChats*). La URL de webhook de la app no se toca: LegacyChats sigue con sus demás líneas.
+4. **LegacyChats (E6): no se apaga** hasta que el dueño compruebe desde LegacyEnterprise que un mensaje se envía (decisión del 2026-09-26).
+   Después: cambiar la URL de webhook de la app a LegacyEnterprise, quitar los overrides, apagar su infraestructura y archivar
+   `F:\Proyectos\LegacyChats`. No se ha tocado nada de LegacyChats.
 
 ## Registro de lo hecho (referencia para producción y futuras apps)
 
@@ -198,6 +191,9 @@ Receta sin Docker en Windows (usada para probar el CRM v0; todo en una carpeta t
 5. Login de prueba (solo en dev): `window.__leDev.login('dev-token-l4')` desde la consola del navegador y `__leDev.go('/m/crm')`.
 
 ## Hallazgos fuera de este proyecto
+- **LegacyChats (2026-09-26):** el DNS de `api.legacychats…` apunta a `kingdom-vps`, pero en el crontab de `legacy-vps` los workers de la copia de
+  LegacyChats (`wa_worker`, `inbox_worker`, QA y PDN) están **activos**, aunque su comentario dice «DESACTIVADOS hasta el corte (si corren en las
+  dos VPS a la vez se duplican envíos de WhatsApp)». No se tocó; revisar antes de cualquier campaña en LegacyChats.
 - **LegacyInSite (producción)** sirve `ngsw-worker.js`, `index.html` y `manifest.webmanifest` con `cache-control: max-age=3600`
   (su `firebase.json` no tiene `headers`): los usuarios pueden quedar hasta 1 h en una versión vieja.
 - **Plantillas de la skill `bootstrap-app`** con bugs encontrados aquí (corregidos aquí y devueltos a la skill en su v3.2, junto con el gitflow estándar):
